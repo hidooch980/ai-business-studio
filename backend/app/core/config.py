@@ -36,10 +36,12 @@ class Settings:
 def get_settings() -> Settings:
     database_url = os.getenv("DATABASE_URL")
     database_url = database_url.strip() if database_url and database_url.strip() else None
+    if database_url and database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
     app_env = os.getenv("APP_ENV", "development")
     secure_cookie = _env_bool("SESSION_COOKIE_SECURE", True)
     if app_env.casefold() == "production":
-        if not database_url or not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        if not database_url or not database_url.startswith("postgresql+psycopg://"):
             raise ValueError("Production requires a PostgreSQL DATABASE_URL")
         if not secure_cookie:
             raise ValueError("SESSION_COOKIE_SECURE must be true in production")
