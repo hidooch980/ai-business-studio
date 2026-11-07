@@ -73,12 +73,15 @@ Exit gate: end-to-end purchase-to-stock and order-to-cash workflows with reconci
 
 ## 5. Workflow and notifications
 
-Status: **Not started**
+Status: **Transactional outbox core implemented; dispatch and workflow features remain**
 
-- [ ] Durable background job/outbox pattern.
+- [x] Durable tenant-scoped outbox table with idempotent event deduplication.
+- [x] Inventory movement events are enqueued in the same database transaction as stock posting.
+- [x] Worker leasing, stale-lease protection, retry scheduling and dead-letter state with service tests.
+- [ ] Background worker process and handler registry.
 - [ ] Configurable multi-step approvals and separation of duties.
 - [ ] In-app notifications and email provider adapter.
-- [ ] Retry, dead-letter, deduplication, and idempotent event consumers.
+- [ ] Provider delivery adapters, idempotent event consumers, retry telemetry and operational dashboards.
 - [ ] Complete actor/action history for workflow transitions.
 
 Exit gate: retry/replay tests and no lost events across transaction failures.
