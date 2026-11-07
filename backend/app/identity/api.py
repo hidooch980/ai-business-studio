@@ -9,7 +9,13 @@ from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import AuthenticatedPrincipal, build_auth_context, get_authenticated_principal
 from backend.app.identity.api_schemas import AuthContextResponse, LoginRequest, RegisterRequest
 from backend.app.identity.models import AuditEvent
-from backend.app.identity.service import authenticate_user, create_user_session, register_user, revoke_session
+from backend.app.identity.service import (
+    IdentityConflictError,
+    authenticate_user,
+    create_user_session,
+    register_user,
+    revoke_session,
+)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -72,6 +78,9 @@ def register(
             )
         )
         db.commit()
+    except IdentityConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Registration could not be completed") from exc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Registration could not be completed") from exc
