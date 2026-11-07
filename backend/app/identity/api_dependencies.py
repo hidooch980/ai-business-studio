@@ -1,5 +1,6 @@
 import hmac
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -65,6 +66,16 @@ def require_csrf_protection(
     db: Session = Depends(get_db_session),
 ) -> None:
     settings = get_settings()
+    source_origin = request.headers.get("origin") or request.headers.get("referer")
+    if source_origin:
+        parsed_origin = urlsplit(source_origin)
+        request_host = request.headers.get("host", "").casefold()
+        if (
+            parsed_origin.scheme not in {"http", "https"}
+            or not parsed_origin.netloc
+            or parsed_origin.netloc.casefold() != request_host
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Untrusted request origin")
     session_token = request.cookies.get(settings.session_cookie_name)
     if not session_token:
         return
