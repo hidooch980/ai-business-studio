@@ -20,10 +20,6 @@ def auth_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, 
 
     engine = create_engine("sqlite://")
 
-    @pytest.fixture
-    def _unused() -> None:
-        return None
-
     Base.metadata.create_all(engine)
     application = create_app()
 
