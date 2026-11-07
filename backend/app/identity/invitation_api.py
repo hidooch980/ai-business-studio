@@ -92,6 +92,8 @@ def create_invitation(
     role = db.scalar(select(Role).where(Role.id == payload.role_id, Role.tenant_id == principal.tenant.id))
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    if role.is_system:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="System roles cannot be granted through invitations")
     now = _now()
     recent_count = db.scalar(select(func.count(TenantInvitation.id)).where(
         TenantInvitation.tenant_id == principal.tenant.id,
