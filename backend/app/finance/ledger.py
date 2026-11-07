@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.identity.models import AuditEvent, JournalEntry, JournalLine
+from backend.app.identity.models import AuditEvent, FinancialAccount, JournalEntry, JournalLine
 
 
 class JournalConflictError(ValueError):
@@ -21,7 +21,7 @@ def _normalized_payload(currency: str, description: str, lines: list[dict]) -> d
         "description": description.strip(),
         "lines": [
             {
-                "account_code": item["account_code"].strip(),
+                "account_code": item["account_code"].strip().upper(),
                 "memo": (item.get("memo") or "").strip() or None,
                 "debit_minor": int(item.get("debit_minor", 0)),
                 "credit_minor": int(item.get("credit_minor", 0)),
@@ -88,6 +88,18 @@ def create_journal_entry(
             raise JournalConflictError("Idempotency-Key was already used for a different journal entry")
         return existing, False
 
+    accounts = db.scalars(
+        select(FinancialAccount).where(
+            FinancialAccount.tenant_id == tenant_id,
+            FinancialAccount.code.in_({item["account_code"] for item in normalized_lines}),
+            FinancialAccount.is_active.is_(True),
+        )
+    ).all()
+    account_by_code = {account.code: account for account in accounts}
+    missing_accounts = sorted({item["account_code"] for item in normalized_lines} - set(account_by_code))
+    if missing_accounts:
+        raise ValueError(f"Unknown or inactive financial account code(s): {', '.join(missing_accounts)}")
+
     entry = JournalEntry(
         tenant_id=tenant_id,
         idempotency_key=key,
@@ -129,6 +141,7 @@ def create_journal_entry(
                 journal_entry_id=entry.id,
                 line_number=index,
                 account_code=item["account_code"],
+                financial_account_id=account_by_code[item["account_code"]].id,
                 memo=item["memo"],
                 debit_minor=item["debit_minor"],
                 credit_minor=item["credit_minor"],
@@ -167,6 +180,7 @@ def serialize_journal_entry(db: Session, entry: JournalEntry) -> dict:
             {
                 "line_number": line.line_number,
                 "account_code": line.account_code,
+                "financial_account_id": str(line.financial_account_id) if line.financial_account_id else None,
                 "memo": line.memo,
                 "debit_minor": line.debit_minor,
                 "credit_minor": line.credit_minor,
