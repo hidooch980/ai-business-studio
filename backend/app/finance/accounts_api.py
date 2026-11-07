@@ -44,6 +44,10 @@ class AccountUpdateRequest(BaseModel):
     def require_update(self) -> "AccountUpdateRequest":
         if not self.model_fields_set:
             raise ValueError("At least one account field must be supplied")
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("Account name cannot be null")
+        if "is_active" in self.model_fields_set and self.is_active is None:
+            raise ValueError("Account active state cannot be null")
         return self
 
 
@@ -93,7 +97,7 @@ def create_account(
                 FinancialAccount.id == payload.parent_account_id,
                 FinancialAccount.tenant_id == principal.tenant.id,
                 FinancialAccount.is_active.is_(True),
-            )
+            ).with_for_update()
         )
         if parent is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active parent account not found")
@@ -104,7 +108,7 @@ def create_account(
             )
     account = FinancialAccount(
         tenant_id=principal.tenant.id,
-        code=payload.code,
+        code=payload.code.upper(),
         name=payload.name,
         account_type=payload.account_type,
         description=payload.description,
