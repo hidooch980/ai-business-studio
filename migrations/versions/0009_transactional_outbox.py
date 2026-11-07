@@ -1,7 +1,7 @@
 """Add durable transactional outbox.
 
 Revision ID: 0010_transactional_outbox
-Revises: 0008_inventory_ledger
+Revises: 0009_financial_accounts
 Create Date: 2026-11-07
 """
 
