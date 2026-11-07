@@ -11,7 +11,8 @@ Status: **In progress**
 - [x] SQLite foreign-key enforcement enabled by the application engine.
 - [x] Production configuration rejects missing/non-PostgreSQL databases and insecure session cookies.
 - [x] Dependency audit step added to CI.
-- [ ] Latest commit passes all CI jobs, including dependency audit.
+- [x] Verified CI run at `b97beb3e79fbf357652c84777628441da447d405`: Python 3.11 and 3.12, Ruff, 38 tests, pip-audit, Compose validation, and Docker build all passed.
+- [ ] Upgrade rehearsal with representative existing data.
 - [ ] Rehearse upgrade from the previous supported schema with representative data.
 
 Exit gate: all checks green on the same head SHA and both SQLite/PostgreSQL migration paths verified.
