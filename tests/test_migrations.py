@@ -177,7 +177,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         text=True,
     )
     assert downgrade.returncode == 0, f"alembic downgrade failed:\\n{downgrade.stdout}\\n{downgrade.stderr}"
-    engine = create_engine(database_url)
+    engine = build_engine(database_url)
     try:
         assert not (tables - {"alembic_version"}).intersection(inspect(engine).get_table_names())
     finally:
