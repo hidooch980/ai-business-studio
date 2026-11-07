@@ -214,6 +214,59 @@ def test_product_cannot_be_deactivated_while_stock_remains(inventory_client: Tes
     )
     assert deactivated.status_code == 204
 
+
+
+def test_warehouse_cannot_be_deactivated_while_stock_remains(inventory_client: TestClient) -> None:
+    tenant_id, csrf = _register(inventory_client, "warehouse-stock-owner@example.test", "warehouse-stock-studio")
+    headers = _headers(inventory_client, tenant_id, csrf)
+    warehouse = inventory_client.post(
+        "/api/v1/inventory/warehouses",
+        json={"code": "ACTIVE", "name": "Active warehouse"},
+        headers=headers,
+    )
+    product = inventory_client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "WAREHOUSE-ITEM", "name": "Warehouse item"},
+        headers=headers,
+    )
+    assert warehouse.status_code == 201
+    assert product.status_code == 201
+    receipt = inventory_client.post(
+        "/api/v1/inventory/movements",
+        json={
+            "warehouse_id": warehouse.json()["id"],
+            "product_id": product.json()["id"],
+            "movement_type": "receipt",
+            "quantity": 2,
+        },
+        headers={**headers, "Idempotency-Key": "warehouse-stock-receipt"},
+    )
+    assert receipt.status_code == 201, receipt.text
+    blocked = inventory_client.patch(
+        f"/api/v1/inventory/warehouses/{warehouse.json()['id']}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert blocked.status_code == 409
+    issue = inventory_client.post(
+        "/api/v1/inventory/movements",
+        json={
+            "warehouse_id": warehouse.json()["id"],
+            "product_id": product.json()["id"],
+            "movement_type": "issue",
+            "quantity": 2,
+        },
+        headers={**headers, "Idempotency-Key": "warehouse-stock-issue"},
+    )
+    assert issue.status_code == 201, issue.text
+    deactivated = inventory_client.patch(
+        f"/api/v1/inventory/warehouses/{warehouse.json()['id']}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["is_active"] is False
+
 def test_inventory_rejects_cross_tenant_warehouse_and_product(inventory_client: TestClient) -> None:
     first_tenant, first_csrf = _register(inventory_client, "first-owner@example.test", "first-stock")
     first_headers = _headers(inventory_client, first_tenant, first_csrf)
