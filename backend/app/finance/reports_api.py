@@ -12,7 +12,10 @@ from backend.app.identity.models import FinancialAccount, JournalEntry, JournalL
 
 router = APIRouter(prefix="/finance/reports", tags=["finance-reports"])
 
-CurrencyCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=3)]
+CurrencyCode = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$"),
+]
 
 
 @router.get("/trial-balance")
