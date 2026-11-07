@@ -22,11 +22,11 @@ const initialNotices: Notice[] = [
   { id: 3, title: "گزارش پایان روز آماده است", detail: "گزارش نمونه برای پیش‌نمایش", kind: "info" },
 ];
 
-export default function WorkspaceTools({ role }: { role: Role }) {
+export default function WorkspaceTools({ role, showMetrics, onToggleMetrics }: { role: Role; showMetrics: boolean; onToggleMetrics: () => void }) {
   const [query, setQuery] = useState("");
   const [notices, setNotices] = useState(initialNotices);
   const [showAllNotices, setShowAllNotices] = useState(false);
-  const [visibleWidgets, setVisibleWidgets] = useState(["metrics", "approvals", "activity"]);
+  const [visibleWidgets, setVisibleWidgets] = useState(["approvals", "activity"]);
   const [showCustomize, setShowCustomize] = useState(false);
   const [reviewed, setReviewed] = useState<number[]>([]);
 
@@ -41,7 +41,7 @@ export default function WorkspaceTools({ role }: { role: Role }) {
 
   const approvalCount = notices.filter(item => item.kind === "approval" && !reviewed.includes(item.id)).length;
   const widgetOptions = [
-    { id: "metrics", label: "کارت‌های شاخص" },
+
     { id: "approvals", label: "مرکز تأییدها" },
     { id: "activity", label: "اعلان‌ها و فعالیت‌ها" },
   ];
@@ -66,6 +66,7 @@ export default function WorkspaceTools({ role }: { role: Role }) {
 
     {showCustomize && <div className="workspace-customize-panel">
       <div><b>نمایش کارت‌های داشبورد</b><small>تنظیمات فقط در همین پیش‌نمایش و تا زمان باز بودن صفحه نگهداری می‌شود.</small></div>
+      <label><input type="checkbox" checked={showMetrics} onChange={onToggleMetrics} />کارت‌های شاخص</label>
       {widgetOptions.map(item => <label key={item.id}><input type="checkbox" checked={visibleWidgets.includes(item.id)} onChange={() => toggleWidget(item.id)} />{item.label}</label>)}
     </div>}
 
