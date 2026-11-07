@@ -6,11 +6,17 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
-from backend.app.identity.api_dependencies import AuthenticatedPrincipal, build_auth_context, get_authenticated_principal
+from backend.app.identity.api_dependencies import (
+    AuthenticatedPrincipal,
+    build_auth_context,
+    get_authenticated_principal,
+    require_csrf_protection,
+)
 from backend.app.identity.api_schemas import AuthContextResponse, LoginRequest, RegisterRequest
 from backend.app.identity.models import AuditEvent
 from backend.app.identity.service import (
     IdentityConflictError,
+    create_csrf_token,
     authenticate_user,
     create_user_session,
     register_user,
@@ -20,7 +26,7 @@ from backend.app.identity.service import (
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
+def _set_session_cookie(response: Response, token: str, csrf_token: str) -> None:
     settings = get_settings()
     response.set_cookie(
         key=settings.session_cookie_name,
@@ -30,6 +36,15 @@ def _set_session_cookie(response: Response, token: str) -> None:
         secure=settings.session_cookie_secure,
         samesite="lax",
         path="/api/v1/auth",
+    )
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=csrf_token,
+        max_age=settings.session_lifetime_seconds,
+        httponly=False,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/api/v1",
     )
 
 
@@ -42,6 +57,13 @@ def _clear_session_cookie(response: Response) -> None:
         httponly=True,
         samesite="lax",
     )
+    response.delete_cookie(
+        key=settings.csrf_cookie_name,
+        path="/api/v1",
+        secure=settings.session_cookie_secure,
+        httponly=False,
+        samesite="lax",
+    )
 
 
 @router.post("/register", response_model=AuthContextResponse, status_code=status.HTTP_201_CREATED)
@@ -49,6 +71,7 @@ def register(
     payload: RegisterRequest,
     response: Response,
     db: Session = Depends(get_db_session),
+    _csrf: None = Depends(require_csrf_protection),
 ) -> dict:
     settings = get_settings()
     if not settings.allow_public_registration:
@@ -62,11 +85,12 @@ def register(
             password=payload.password,
             display_name=payload.display_name,
         )
-        token, _session = create_user_session(
+        token, session = create_user_session(
             db,
             user=user,
             lifetime=timedelta(seconds=settings.session_lifetime_seconds),
         )
+        csrf_token = create_csrf_token(db, session)
         db.add(
             AuditEvent(
                 tenant_id=tenant.id,
@@ -87,7 +111,7 @@ def register(
     except Exception:
         db.rollback()
         raise
-    _set_session_cookie(response, token)
+    _set_session_cookie(response, token, csrf_token)
     return build_auth_context(db, user)
 
 
@@ -96,16 +120,18 @@ def login(
     payload: LoginRequest,
     response: Response,
     db: Session = Depends(get_db_session),
+    _csrf: None = Depends(require_csrf_protection),
 ) -> dict:
     user = authenticate_user(db, email=payload.email, password=payload.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     settings = get_settings()
-    token, _session = create_user_session(
+    token, session = create_user_session(
         db,
         user=user,
         lifetime=timedelta(seconds=settings.session_lifetime_seconds),
     )
+    csrf_token = create_csrf_token(db, session)
     db.add(
         AuditEvent(
             actor_user_id=user.id,
@@ -116,7 +142,7 @@ def login(
         )
     )
     db.commit()
-    _set_session_cookie(response, token)
+    _set_session_cookie(response, token, csrf_token)
     return build_auth_context(db, user)
 
 
@@ -133,6 +159,7 @@ def logout(
     request: Request,
     response: Response,
     db: Session = Depends(get_db_session),
+    _csrf: None = Depends(require_csrf_protection),
 ) -> Response:
     settings = get_settings()
     token = request.cookies.get(settings.session_cookie_name)
