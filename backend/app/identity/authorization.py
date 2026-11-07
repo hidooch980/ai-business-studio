@@ -32,7 +32,7 @@ def membership_has_permission(db: Session, membership: Membership, permission_co
             MembershipRole.membership_id == membership.id,
             Role.tenant_id == membership.tenant_id,
             Permission.code == permission_code,
-            membership.is_active.is_(True),
+            Membership.is_active.is_(True),
         )
         .limit(1)
     )
