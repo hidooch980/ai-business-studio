@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./role-workspaces.css";
 
 type Role = "owner" | "manager" | "employee" | "customer";
 type RoleConfig = {
