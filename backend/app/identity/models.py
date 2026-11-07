@@ -218,6 +218,7 @@ class JournalLine(Base):
     journal_entry_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     line_number: Mapped[int] = mapped_column(Integer, nullable=False)
     account_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    financial_account_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     memo: Mapped[str | None] = mapped_column(String(255))
     debit_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     credit_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
