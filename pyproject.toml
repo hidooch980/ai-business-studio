@@ -17,6 +17,9 @@ dependencies = [
   "argon2-cffi>=23.1,<26.0",
 ]
 
+[project.scripts]
+ai-business-studio-outbox = "backend.app.outbox.runner:main"
+
 [project.optional-dependencies]
 dev = [
   "httpx2>=2.16,<3.0",
