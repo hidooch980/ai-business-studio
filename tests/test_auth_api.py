@@ -221,7 +221,7 @@ def test_login_rate_limit_also_blocks_password_spraying_across_emails(auth_clien
             json={"email": f"spray-{attempt}@example.test", "password": "incorrect password"},
             headers={"X-CSRF-Token": csrf_token},
         )
-        assert response.status_code == 401
+        assert response.status_code == (429 if attempt == 7 else 401)
     blocked = auth_client.post(
         "/api/v1/auth/login",
         json={"email": payload["email"], "password": payload["password"]},
