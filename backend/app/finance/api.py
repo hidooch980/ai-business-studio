@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
 from backend.app.finance.ledger import (
+    AccountingPeriodConflictError,
     JournalConflictError,
     create_journal_entry,
     reverse_journal_entry,
@@ -30,6 +31,7 @@ class JournalLineInput(BaseModel):
 
 
 class JournalCreateRequest(BaseModel):
+    posting_date: date | None = None
     currency: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=3)]
     description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
     lines: list[JournalLineInput] = Field(min_length=2, max_length=100)
@@ -54,8 +56,9 @@ def create_journal(
             currency=payload.currency,
             description=payload.description,
             lines=[line.model_dump() for line in payload.lines],
+            posting_date=payload.posting_date,
         )
-    except JournalConflictError as exc:
+    except (JournalConflictError, AccountingPeriodConflictError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
