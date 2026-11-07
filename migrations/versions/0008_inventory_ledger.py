@@ -137,8 +137,12 @@ def upgrade() -> None:
                  WHERE tenant_id = NEW.tenant_id
                    AND warehouse_id = NEW.warehouse_id
                    AND product_id = NEW.product_id;
-                SELECT CASE WHEN changes() = 0
-                    THEN RAISE(ABORT, 'inventory balance row is missing') END;
+                SELECT CASE WHEN NOT EXISTS (
+                    SELECT 1 FROM inventory_balances
+                     WHERE tenant_id = NEW.tenant_id
+                       AND warehouse_id = NEW.warehouse_id
+                       AND product_id = NEW.product_id
+                ) THEN RAISE(ABORT, 'inventory balance row is missing') END;
             END
         """))
     elif dialect == "postgresql":
