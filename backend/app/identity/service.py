@@ -178,6 +178,13 @@ def login_ip_identifier_hash(client_ip: str, secret: str) -> str:
     return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
 
 
+def login_account_identifier_hash(email: str, secret: str) -> str:
+    """Return a keyed identifier shared by attempts against one account across all IPs."""
+    normalized_email = email.strip().casefold()
+    material = f"account\0{normalized_email}".encode()
+    return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
+
+
 def prune_login_rate_limits(db: Session, retention_days: int = 30) -> int:
     if retention_days < 1:
         raise ValueError("retention_days must be positive")
