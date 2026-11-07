@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from uuid import UUID
 
 import pytest
 from fastapi import APIRouter, Depends
@@ -218,7 +219,7 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
     assert denied.status_code == 403
 
     with Session(auth_client.app.state.test_engine) as db:
-        membership = db.query(Membership).filter_by(tenant_id=tenant_id).one()
+        membership = db.query(Membership).filter_by(tenant_id=UUID(tenant_id)).one()
         permission = Permission(code="reports.read", description="Read reports")
         second_tenant = Tenant(name="Other Tenant", slug="other-tenant")
         db.add_all([permission, second_tenant])
