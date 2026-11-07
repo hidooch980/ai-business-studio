@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import hmac
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
@@ -29,3 +30,17 @@ def issue_session_token() -> tuple[str, str]:
 
 def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def issue_csrf_token() -> tuple[str, str]:
+    """Return a session-bound CSRF token and its SHA-256 digest."""
+    token = secrets.token_urlsafe(32)
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return token, digest
+
+
+def verify_csrf_token(token: str, expected_digest: str | None) -> bool:
+    if not expected_digest:
+        return False
+    actual_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(actual_digest, expected_digest)
