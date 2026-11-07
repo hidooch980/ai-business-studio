@@ -4,8 +4,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from backend.app.db.base import Base
 from backend.app.core.config import get_settings
+from backend.app.db.base import Base
 
 # Import model modules here as domain models are introduced.
 target_metadata = Base.metadata
