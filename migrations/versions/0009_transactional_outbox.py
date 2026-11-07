@@ -1,6 +1,6 @@
 """Add durable transactional outbox.
 
-Revision ID: 0009_transactional_outbox
+Revision ID: 0010_transactional_outbox
 Revises: 0008_inventory_ledger
 Create Date: 2026-11-07
 """
@@ -8,8 +8,8 @@ Create Date: 2026-11-07
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0009_transactional_outbox"
-down_revision = "0008_inventory_ledger"
+revision = "0010_transactional_outbox"
+down_revision = "0009_financial_accounts"
 branch_labels = None
 depends_on = None
 
