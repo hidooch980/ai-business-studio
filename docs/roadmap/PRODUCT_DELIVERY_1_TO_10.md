@@ -89,7 +89,8 @@ Status: **Transactional outbox core implemented; dispatch and workflow features 
 - [x] Durable tenant-scoped outbox table with idempotent event deduplication.
 - [x] Inventory movement events are enqueued in the same database transaction as stock posting.
 - [x] Atomic SQLite claims and PostgreSQL skip-locked worker leasing, stale-lease protection, retry scheduling and dead-letter state with service tests.
-- [ ] Background worker process and handler registry.
+- [x] Reusable leased-batch dispatcher with typed handler registry, isolated per-event sessions, delivery acknowledgement, retry handling, and dead-letter handling; regression tests cover success, handler failure, and unknown event types.
+- [ ] Long-running worker process, graceful shutdown, health/metrics, and handler registry wiring.
 - [ ] Configurable multi-step approvals and separation of duties.
 - [ ] In-app notifications and email provider adapter.
 - [ ] Provider delivery adapters, idempotent event consumers, retry telemetry and operational dashboards.
