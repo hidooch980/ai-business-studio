@@ -1,6 +1,6 @@
 # Retail UX/UI Design System
 
-Status: approved design foundation; implementation is not yet present.
+Status: approved design foundation; the initial four-role frontend preview and local workspace controls are implemented. Production API integration and server-side authorization remain pending.
 
 ## Product experience principles
 
