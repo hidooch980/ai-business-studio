@@ -15,10 +15,10 @@ from backend.app.identity.api_dependencies import (
 from backend.app.identity.api_schemas import AuthContextResponse, LoginRequest, RegisterRequest
 from backend.app.identity.models import AuditEvent
 from backend.app.identity.service import (
-    IdentityConflictError,
-    create_csrf_token,
     authenticate_user,
+    create_csrf_token,
     create_user_session,
+    IdentityConflictError,
     register_user,
     revoke_session,
 )
