@@ -67,10 +67,18 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
             )
             connection.execute(
                 text(
+                    "INSERT INTO financial_periods "
+                    "(id, tenant_id, name, start_date, end_date, status, created_by_user_id, created_at, updated_at) "
+                    "VALUES (:id, :tenant, 'FY-2026', '2026-01-01', '2026-12-31', 'open', :user, :created_at, :created_at)"
+                ),
+                {"id": uuid4(), "tenant": tenant_id, "user": user_id, "created_at": "2026-01-01T00:00:00+00:00"},
+            )
+            connection.execute(
+                text(
                     "INSERT INTO journal_entries "
-                    "(id, tenant_id, idempotency_key, request_hash, currency, description, "
+                    "(id, tenant_id, idempotency_key, request_hash, currency, posting_date, description, "
                     "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
-                    "VALUES (:id, :tenant, 'pg-ledger-test', :hash, 'USD', 'Postgres ledger test', "
+                    "VALUES (:id, :tenant, 'pg-ledger-test', :hash, 'USD', '2026-01-01', 'Postgres ledger test', "
                     "100, 100, :user, :created_at)"
                 ),
                 {
@@ -145,9 +153,9 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
             connection.execute(
                 text(
                     "INSERT INTO journal_entries "
-                    "(id, tenant_id, idempotency_key, request_hash, currency, description, "
+                    "(id, tenant_id, idempotency_key, request_hash, currency, posting_date, description, "
                     "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
-                    "VALUES (:id, :tenant, 'pg-cross-tenant-account', :hash, 'USD', "
+                    "VALUES (:id, :tenant, 'pg-cross-tenant-account', :hash, 'USD', '2026-01-01', "
                     "'Cross-tenant account FK test', 100, 100, :user, :created_at)"
                 ),
                 {
