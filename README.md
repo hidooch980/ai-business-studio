@@ -50,7 +50,6 @@ Implemented in the foundation branch:
 
 Not implemented and still required before production use:
 - MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
-- MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
 - API-wide IP/account rate limits; invitation create/resend currently has a per-tenant 20-per-hour limit.
 - Independent production security review and additional PostgreSQL concurrency stress tests for role and invitation operations.
 - Complete accounting domain: chart of accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
