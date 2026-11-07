@@ -24,7 +24,15 @@ export BACKUP_RETENTION_DAYS=30
 
 The script uses `pg_dump` custom format, encrypts the dump before publishing it, sets restrictive file permissions, and writes a SHA-256 checksum for the encrypted artifact. Store a second copy off-host with restricted access.
 
-Schedule the script with a protected systemd timer or equivalent scheduler. Configure monitoring for missed backups and disk capacity; a scheduled command without alerting is not reliable backup coverage.
+A hardened systemd service and persistent daily timer template are provided under `deploy/systemd/`. To install:
+
+1. Install PostgreSQL client tools and `age`; create a dedicated `abs-backup` system user.
+2. Install the scripts under `/opt/ai-business-studio/scripts/` and create `/var/backups/ai-business-studio` owned by `abs-backup` with mode 0700.
+3. Create `/etc/ai-business-studio/backup.env` (mode 0600, owned by `abs-backup`) with `PGSERVICE`, `PGSERVICEFILE`, `PGDATABASE`, `PGPASSFILE`, `BACKUP_DIR`, `BACKUP_AGE_RECIPIENT`, and `BACKUP_RETENTION_DAYS`. Keep the password file and service definition protected and outside this repository.
+4. Install both unit files under `/etc/systemd/system/`, run `systemctl daemon-reload`, then `systemctl enable --now ai-business-studio-backup.timer`.
+5. Verify with `systemctl list-timers` and run `systemctl start ai-business-studio-backup.service` once as a controlled test.
+
+Configure monitoring for missed backups and disk capacity; a scheduled command without alerting is not reliable backup coverage.
 
 ## Restore (destructive)
 
