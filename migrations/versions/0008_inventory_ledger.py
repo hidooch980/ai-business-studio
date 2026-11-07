@@ -127,6 +127,20 @@ def upgrade() -> None:
             BEFORE DELETE ON inventory_movements
             BEGIN SELECT RAISE(ABORT, 'inventory_movements are append-only'); END
         """))
+        op.execute(sa.text("""
+            CREATE TRIGGER inventory_movements_apply_balance
+            AFTER INSERT ON inventory_movements
+            BEGIN
+                UPDATE inventory_balances
+                   SET quantity_on_hand = quantity_on_hand + NEW.quantity_delta,
+                       updated_at = NEW.created_at
+                 WHERE tenant_id = NEW.tenant_id
+                   AND warehouse_id = NEW.warehouse_id
+                   AND product_id = NEW.product_id;
+                SELECT CASE WHEN changes() = 0
+                    THEN RAISE(ABORT, 'inventory balance row is missing') END;
+            END
+        """))
     elif dialect == "postgresql":
         op.execute(sa.text("""
             CREATE FUNCTION prevent_inventory_movement_mutation()
@@ -140,6 +154,33 @@ def upgrade() -> None:
             CREATE TRIGGER inventory_movements_no_update_delete
             BEFORE UPDATE OR DELETE ON inventory_movements
             FOR EACH ROW EXECUTE FUNCTION prevent_inventory_movement_mutation()
+        """))
+        op.execute(sa.text("""
+            CREATE TRIGGER inventory_movements_no_truncate
+            BEFORE TRUNCATE ON inventory_movements
+            FOR EACH STATEMENT EXECUTE FUNCTION prevent_inventory_movement_mutation()
+        """))
+        op.execute(sa.text("""
+            CREATE FUNCTION apply_inventory_movement_to_balance()
+            RETURNS trigger LANGUAGE plpgsql AS $inventory_balance$
+            BEGIN
+                UPDATE inventory_balances
+                   SET quantity_on_hand = quantity_on_hand + NEW.quantity_delta,
+                       updated_at = NEW.created_at
+                 WHERE tenant_id = NEW.tenant_id
+                   AND warehouse_id = NEW.warehouse_id
+                   AND product_id = NEW.product_id;
+                IF NOT FOUND THEN
+                    RAISE EXCEPTION 'inventory balance row is missing';
+                END IF;
+                RETURN NEW;
+            END;
+            $inventory_balance$
+        """))
+        op.execute(sa.text("""
+            CREATE TRIGGER inventory_movements_apply_balance
+            AFTER INSERT ON inventory_movements
+            FOR EACH ROW EXECUTE FUNCTION apply_inventory_movement_to_balance()
         """))
     else:
         raise RuntimeError(f"Unsupported database dialect for inventory ledger: {dialect}")
@@ -217,10 +258,18 @@ def downgrade() -> None:
     if dialect == "sqlite":
         op.execute(sa.text("DROP TRIGGER IF EXISTS inventory_movements_no_update"))
         op.execute(sa.text("DROP TRIGGER IF EXISTS inventory_movements_no_delete"))
+        op.execute(sa.text("DROP TRIGGER IF EXISTS inventory_movements_apply_balance"))
     elif dialect == "postgresql":
         op.execute(sa.text(
             "DROP TRIGGER IF EXISTS inventory_movements_no_update_delete ON inventory_movements"
         ))
+        op.execute(sa.text(
+            "DROP TRIGGER IF EXISTS inventory_movements_no_truncate ON inventory_movements"
+        ))
+        op.execute(sa.text(
+            "DROP TRIGGER IF EXISTS inventory_movements_apply_balance ON inventory_movements"
+        ))
+        op.execute(sa.text("DROP FUNCTION IF EXISTS apply_inventory_movement_to_balance()"))
         op.execute(sa.text("DROP FUNCTION IF EXISTS prevent_inventory_movement_mutation()"))
 
     op.drop_index("ix_inventory_movements_tenant_stock", table_name="inventory_movements")
