@@ -477,6 +477,13 @@ def test_membership_role_can_be_removed_without_affecting_other_tenants(auth_cli
     )
     assert role.status_code == 201
     role_id = role.json()["id"]
+    updated_role = auth_client.patch(
+        f"/api/v1/access/roles/{role_id}",
+        json={"name": "temporary-reviewer-v2", "description": "Updated reviewer"},
+        headers=headers,
+    )
+    assert updated_role.status_code == 200
+    assert updated_role.json()["name"] == "temporary-reviewer-v2"
     assigned = auth_client.put(
         f"/api/v1/access/memberships/{membership_id}/roles/{role_id}",
         headers=headers,
@@ -494,3 +501,8 @@ def test_membership_role_can_be_removed_without_affecting_other_tenants(auth_cli
         headers=headers,
     )
     assert duplicate_removal.status_code == 404
+
+    deleted_role = auth_client.delete(f"/api/v1/access/roles/{role_id}", headers=headers)
+    assert deleted_role.status_code == 204
+    missing_role = auth_client.delete(f"/api/v1/access/roles/{role_id}", headers=headers)
+    assert missing_role.status_code == 404
