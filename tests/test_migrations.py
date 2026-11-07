@@ -28,7 +28,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     try:
         tables = set(inspect(engine).get_table_names())
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0012_accounting_periods"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0013_login_rate_limit_retention"
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -49,6 +49,9 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM audit_events")).scalar_one() == 1
         assert "csrf_token_hash" in {column["name"] for column in inspect(engine).get_columns("user_sessions")}
+        assert "ix_login_rate_limits_updated_at" in {
+            item["name"] for item in inspect(engine).get_indexes("login_rate_limits")
+        }
         assert "uq_tenant_invitations_pending_email" in {index["name"] for index in inspect(engine).get_indexes("tenant_invitations")}
         assert {
             "alembic_version",
