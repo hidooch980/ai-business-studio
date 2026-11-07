@@ -28,7 +28,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     try:
         tables = set(inspect(engine).get_table_names())
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0007_product_catalog"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0008_inventory_ledger"
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -66,6 +66,9 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "journal_entries",
             "journal_lines",
             "products",
+            "warehouses",
+            "inventory_balances",
+            "inventory_movements",
         }.issubset(tables)
         assert "ck_journal_line_one_sided" in {
             item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
