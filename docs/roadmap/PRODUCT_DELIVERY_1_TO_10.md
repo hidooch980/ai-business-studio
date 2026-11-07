@@ -47,7 +47,8 @@ Status: **Journal foundation implemented; accounting domain incomplete**
 - [x] Tenant-scoped chart-of-accounts catalog with typed accounts, same-type parent hierarchy, tenant-safe parent foreign keys and guarded deactivation.
 - [x] Link journal lines to active tenant chart accounts with composite tenant foreign keys; serialize posting against concurrent account deactivation.
 - [ ] Enforce account-type/normal-balance policy at posting time.
-- [ ] Accounting periods, period close/reopen authorization, and locked periods.
+- [x] Tenant-scoped accounting periods with overlap prevention, immutable close state, audit events, and open-period posting enforcement.
+- [ ] Authorized period reopening workflow (controlled adjustment only) and period-end closing checklist.
 - [ ] Trial balance, general ledger, balance sheet, and profit/loss reports.
 - [ ] Reconciliation and adjustment workflows.
 - [ ] Multi-currency FX source, conversion, and rounding policy.
