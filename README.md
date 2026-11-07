@@ -29,11 +29,12 @@ Implemented in the foundation branch:
 - Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
 - Database-enforced tenant consistency for membership-role assignments using composite foreign keys.
 - Case-insensitive unique email index enforced by the database.
-- Versioned Alembic migrations `0001_identity` through `0007_product_catalog`, covering identity, CSRF digests, persistent login throttling, append-only audit events, tenant invitations, the financial journal, and product catalog.
+- Versioned Alembic migrations `0001_identity` through `0008_inventory_ledger`, covering identity, CSRF digests, persistent login throttling, append-only audit events, tenant invitations, the financial journal, and product catalog.
 - HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
 - Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; email delivery remains manual until a provider is configured.
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
 - Tenant-scoped product catalog API: create, list/search, update and soft-deactivate products; tenant-unique SKU/barcode constraints; catalog-specific permissions and audit events.
+- Tenant-scoped inventory foundation: warehouse management, append-only receipt/issue/adjustment movements, idempotency keys, non-negative stock protection, database-maintained balance projections, tenant-composite foreign keys and SQLite/PostgreSQL immutability triggers.
 - Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, and SQLite/PostgreSQL mutation and overposting guards.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Authenticated users can list their own recent sessions and revoke individual sessions, including the current session; revocation is CSRF-protected and audited.
@@ -52,7 +53,7 @@ Not implemented and still required before production use:
 - Production-grade security review, rate limiting for invitation creation beyond its current bounded policy, and concurrency/integration testing against production PostgreSQL.
 - Complete accounting domain: chart of accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
 
-- Product categories/unit conversion, inventory, POS, procurement, sales, CRM, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
+- Product categories/unit conversion, batch/expiry tracking, stock valuation, POS, procurement, sales, CRM, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
 
 The API and ledger are incremental foundations, not a production-ready financial or security boundary. The journal API supports one-time compensating reversals but does not yet provide a chart of accounts, posting periods, reconciliation, FX conversion, tax handling, or financial statements. Do not expose it to real customer data or public production traffic until the remaining security and accounting controls are implemented and independently verified. A documented or planned capability is not evidence that it is implemented.
 
