@@ -524,6 +524,15 @@ def test_invitation_create_accept_is_one_time_and_tenant_scoped(auth_client: Tes
     assert csrf_token
     headers = {"X-Tenant-ID": tenant_id, "X-CSRF-Token": csrf_token}
 
+    system_roles = auth_client.get("/api/v1/access/roles", headers={"X-Tenant-ID": tenant_id})
+    owner_role_id = next(item["id"] for item in system_roles.json()["items"] if item["name"] == "owner")
+    forbidden_owner_invite = auth_client.post(
+        "/api/v1/invitations",
+        json={"email": "escalation@example.test", "display_name": "Escalation", "role_id": owner_role_id},
+        headers=headers,
+    )
+    assert forbidden_owner_invite.status_code == 409
+
     role = auth_client.post(
         "/api/v1/access/roles",
         json={"name": "basic-member", "description": "Basic invited member"},
