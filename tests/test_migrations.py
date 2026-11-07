@@ -11,13 +11,14 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     environment = os.environ.copy()
     environment["DATABASE_URL"] = database_url
 
-    subprocess.run(
+    upgrade = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
-        check=True,
+        check=False,
         env=environment,
         capture_output=True,
         text=True,
     )
+    assert upgrade.returncode == 0, f"alembic upgrade failed:\\n{upgrade.stdout}\\n{upgrade.stderr}"
     engine = create_engine(database_url)
     try:
         tables = set(inspect(engine).get_table_names())
@@ -37,13 +38,14 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     finally:
         engine.dispose()
 
-    subprocess.run(
+    downgrade = subprocess.run(
         [sys.executable, "-m", "alembic", "downgrade", "base"],
-        check=True,
+        check=False,
         env=environment,
         capture_output=True,
         text=True,
     )
+    assert downgrade.returncode == 0, f"alembic downgrade failed:\\n{downgrade.stdout}\\n{downgrade.stderr}"
     engine = create_engine(database_url)
     try:
         assert not (tables - {"alembic_version"}).intersection(inspect(engine).get_table_names())
