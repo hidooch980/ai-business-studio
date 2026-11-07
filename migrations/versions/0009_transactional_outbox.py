@@ -38,15 +38,31 @@ def upgrade() -> None:
             name="ck_outbox_status",
         ),
         sa.CheckConstraint("attempts >= 0", name="ck_outbox_attempts_nonnegative"),
+        sa.CheckConstraint(
+            "(status = 'processing' AND locked_until IS NOT NULL AND locked_by IS NOT NULL AND lease_token IS NOT NULL) "
+            "OR (status <> 'processing' AND locked_until IS NULL AND locked_by IS NULL AND lease_token IS NULL)",
+            name="ck_outbox_lease_state",
+        ),
+        sa.CheckConstraint(
+            "(status = 'delivered' AND delivered_at IS NOT NULL) OR "
+            "(status <> 'delivered' AND delivered_at IS NULL)",
+            name="ck_outbox_delivery_state",
+        ),
+        sa.CheckConstraint("length(trim(event_type)) > 0", name="ck_outbox_event_type_nonempty"),
+        sa.CheckConstraint("length(trim(aggregate_type)) > 0", name="ck_outbox_aggregate_type_nonempty"),
+        sa.CheckConstraint("length(trim(aggregate_id)) > 0", name="ck_outbox_aggregate_id_nonempty"),
+        sa.CheckConstraint("length(trim(dedupe_key)) > 0", name="ck_outbox_dedupe_key_nonempty"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "dedupe_key", name="uq_outbox_tenant_dedupe"),
     )
     op.create_index("ix_outbox_ready", "outbox_events", ["status", "available_at", "created_at"])
     op.create_index("ix_outbox_tenant_created", "outbox_events", ["tenant_id", "created_at"])
+    op.create_index("ix_outbox_processing_lease", "outbox_events", ["status", "locked_until"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_outbox_processing_lease", table_name="outbox_events")
     op.drop_index("ix_outbox_tenant_created", table_name="outbox_events")
     op.drop_index("ix_outbox_ready", table_name="outbox_events")
     op.drop_table("outbox_events")
