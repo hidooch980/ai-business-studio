@@ -5,11 +5,10 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
-from backend.app.db.session import get_db_session
+from backend.app.db.session import build_engine, get_db_session
 from backend.app.main import create_app
 
 
@@ -29,7 +28,7 @@ def inventory_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[Tes
         text=True,
     )
     assert migration.returncode == 0, f"{migration.stdout}\n{migration.stderr}"
-    engine = create_engine(database_url, connect_args={"check_same_thread": False})
+    engine = build_engine(database_url)
     application = create_app()
 
     def override_db() -> Generator[Session, None, None]:
