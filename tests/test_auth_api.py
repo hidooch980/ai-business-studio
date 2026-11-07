@@ -887,7 +887,10 @@ def test_user_can_list_and_revoke_only_their_own_sessions(auth_client: TestClien
     assert len(sessions.json()["items"]) == 2
     assert sum(item["is_current"] for item in sessions.json()["items"]) == 1
 
-    revoke_old = auth_client.delete(f"/api/v1/auth/sessions/{first_session_id}")
+    revoke_old = auth_client.delete(
+        f"/api/v1/auth/sessions/{first_session_id}",
+        headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
+    )
     assert revoke_old.status_code == 204
     sessions_after = auth_client.get("/api/v1/auth/sessions")
     old = next(item for item in sessions_after.json()["items"] if item["id"] == first_session_id)
@@ -895,7 +898,10 @@ def test_user_can_list_and_revoke_only_their_own_sessions(auth_client: TestClien
     assert old["is_active"] is False
 
     current_id = next(item["id"] for item in sessions_after.json()["items"] if item["is_current"])
-    revoke_current = auth_client.delete(f"/api/v1/auth/sessions/{current_id}")
+    revoke_current = auth_client.delete(
+        f"/api/v1/auth/sessions/{current_id}",
+        headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
+    )
     assert revoke_current.status_code == 204
     assert auth_client.get("/api/v1/auth/me").status_code == 401
 
@@ -920,5 +926,8 @@ def test_user_cannot_revoke_another_users_session(auth_client: TestClient) -> No
         _raw, foreign_session = create_user_session(db, user=foreign)
         db.commit()
         foreign_session_id = str(foreign_session.id)
-    response = auth_client.delete(f"/api/v1/auth/sessions/{foreign_session_id}")
+    response = auth_client.delete(
+        f"/api/v1/auth/sessions/{foreign_session_id}",
+        headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
+    )
     assert response.status_code == 404
