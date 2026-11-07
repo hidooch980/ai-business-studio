@@ -1,47 +1,76 @@
 # AI Business Studio
 
-A modular business operations platform for retail and multi-branch businesses in Iran and international markets.
+A modular, offline-capable retail management platform for single-store and multi-branch businesses in Iran and international markets.
 
-## Product direction
+## Approved product scope
 
-AI Business Studio is planned as an offline-capable platform with shared business data across:
+General-purpose retail for grocery, apparel, electronics, home goods, mobile, parts and other retail categories.
 
-- Point of sale (POS), products, barcode/QR and sales
-- Inventory, warehouses, batches and expiry management
-- Procurement and supplier management
-- CRM, customer support and loyalty
-- ERP, finance and accounting workflows
-- Payment provider integrations and reconciliation
-- AI-assisted analytics, forecasting and management reporting
+### Applications
+- Secure OTP sign-in (phone primary, verified email alternate), role-scoped sessions and audit
+- Owner/admin web console
+- Branch manager application
+- Role-based employee application (cashier, sales, inventory and operations)
+- Customer application/PWA with membership, rewards, coupons, receipts and support
+
+All applications share one backend and source of truth, with strict role, tenant and branch authorization.
+
+### Business capabilities
+- POS, barcode/QR, sales, returns and cash/card/online/split payments
+- Catalog, variants, pricing and tax configuration
+- Inventory, warehouses, stock ledger and transfers
+- Purchasing, suppliers and goods receiving
+- Retail finance, cash/bank, receivables/payables and reconciliation
+- Staff shifts, tasks, commissions and payroll export
+- Customer CRM and loyalty: points ledger, tiers, rewards, coupons, campaigns and referrals
+- Single-branch and multi-branch management
+- Offline-capable operation and durable synchronization
+- Reporting, BI and explainable advisory AI
+
+Manufacturing, industrial maintenance, fleet management, project management and enterprise HR are excluded from the retail core.
+
+## Product specifications
+- [Approved retail product scope](docs/RETAIL_PRODUCT_SCOPE.md)
+- [Loyalty and manager/employee/customer applications](docs/LOYALTY_AND_APPS_SPEC.md)
+- [OTP authentication and session security](docs/AUTH_OTP_SECURITY_SPEC.md)
+- [AI Decision Engine specification](docs/AI_DECISION_ENGINE_SPEC.md)
+- [AI retail product roadmap](docs/AI_AUTONOMOUS_RETAIL_ROADMAP.md)
+- [Reporting and BI specification](docs/REPORTING_AND_BI_SPEC.md)
+- [Reporting implementation backlog](docs/REPORTING_IMPLEMENTATION_BACKLOG.md)
+- [Acceptance and verification plan](docs/RETAIL_ACCEPTANCE_TEST_PLAN.md)
 
 ## Architecture decisions
 
 - **Backend:** Python and FastAPI.
 - **Architecture:** modular monolith with explicit domain boundaries and versioned contracts.
 - **Central database:** PostgreSQL.
-- **Local/offline mode:** SQLite on a single local node, with an application-level synchronization protocol. Never share a SQLite database file over a network filesystem.
-- **API:** versioned REST endpoints under `/api/v1`.
-- **Financial and inventory records:** append-only ledgers; corrections use reversal or adjustment entries.
-- **Multi-tenancy:** tenant-scoped data access and authorization checks at service boundaries.
-- **AI:** provider-independent interfaces; AI suggestions are advisory and sensitive actions require authorized human approval.
+- **Local/offline mode:** SQLite in WAL mode on a single local node; never share a SQLite database file over a network filesystem.
+- **API:** versioned REST endpoints under /api/v1.
+- **Ledgers:** append-only finance, inventory and loyalty records; corrections use reversal/adjustment entries.
+- **Multi-tenancy:** tenant- and branch-scoped data access and authorization checks at service boundaries.
+- **Synchronization:** transactional outbox/inbox, idempotency keys, retry handling and explicit conflict resolution.
+- **AI:** advisory only; sensitive actions require authorized human approval.
+- **Localization:** Persian, English, Arabic and Turkish; RTL for Persian/Arabic.
 
 ## Repository status
 
-This repository is being bootstrapped. A documented architecture or planned capability is not evidence that the feature is implemented or production-ready. See the project documentation and CI results as implementation progresses.
+This repository is at specification/bootstrap stage. Documented scope is not evidence that runtime features are implemented or production-ready. Implementation, automated tests, security verification and release checks are required before a stable release can be claimed.
 
-## Development
+## Delivery sequence
 
-The initial foundation will establish:
-
-1. Application factory and health endpoint
-2. Configuration through environment variables
-3. Automated tests and CI
-4. Security and contribution baselines
-5. Domain modules introduced incrementally behind tested contracts
+1. Application foundation, configuration, health, migrations, CI and security baseline.
+2. Tenant/store/branch/user/access model.
+3. Catalog, POS, payments, returns and cash shifts.
+4. Inventory, purchasing and finance ledger.
+5. Customer identity, consent and loyalty engine.
+6. Manager, employee and customer application workflows.
+7. Reporting, multi-branch synchronization and offline recovery.
+8. AI decision engine and advisory modules.
+9. Localization, hardening, end-to-end tests and release packaging.
 
 ## Security
 
-Do not commit credentials, API tokens, private keys, signing keys, customer data, payment-card data, production database files, backups, logs, or environment files. Use GitHub Actions Secrets or an approved secret manager for deployment credentials.
+Do not commit credentials, API tokens, private keys, signing keys, customer data, payment-card data, production database files, backups, logs or environment files. Use GitHub Actions Secrets or an approved secret manager for deployment credentials.
 
 Report suspected vulnerabilities privately to the repository owner. See [SECURITY.md](SECURITY.md).
 
