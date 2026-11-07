@@ -54,9 +54,10 @@ Exit gate: accounting invariants verified with accounting-domain fixtures and Po
 
 ## 4. ERP business modules
 
-Status: **Not started**
+Status: **Product catalog first slice implemented; remaining ERP modules not started**
 
-- [ ] Product and service catalog, units, categories, barcode/QR.
+- [x] Tenant-scoped product catalog with SKU/barcode uniqueness, search, update, soft-deactivation, permission checks and audit events.
+- [ ] Product/service categories, unit conversion and barcode/QR workflows.
 - [ ] Warehouses, stock movements, batches, expiry, and stock valuation.
 - [ ] Purchase orders, goods receipt, supplier bills, and supplier balances.
 - [ ] Sales orders, invoices, returns, discounts, and customer balances.
