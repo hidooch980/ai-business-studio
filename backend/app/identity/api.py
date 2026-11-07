@@ -21,6 +21,10 @@ from backend.app.identity.service import (
     create_user_session,
     register_user,
     revoke_session,
+    clear_login_failures,
+    is_login_locked,
+    login_identifier_hash,
+    record_login_failure,
 )
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -118,14 +122,38 @@ def register(
 @router.post("/login", response_model=AuthContextResponse)
 def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db_session),
     _csrf: None = Depends(require_csrf_protection),
 ) -> dict:
+    settings = get_settings()
+    client_ip = request.client.host if request.client is not None else "unknown"
+    identifier_hash = login_identifier_hash(payload.email, client_ip, settings.auth_rate_limit_secret)
+    if is_login_locked(db, identifier_hash):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again later.")
     user = authenticate_user(db, email=payload.email, password=payload.password)
     if user is None:
+        locked = record_login_failure(
+            db,
+            identifier_hash=identifier_hash,
+            max_attempts=settings.auth_rate_limit_attempts,
+            window_seconds=settings.auth_rate_limit_window_seconds,
+            lock_seconds=settings.auth_rate_limit_lock_seconds,
+        )
+        db.add(
+            AuditEvent(
+                action="auth.login_failed",
+                resource_type="identity",
+                resource_id=identifier_hash,
+                outcome="denied",
+            )
+        )
+        db.commit()
+        if locked:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again later.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
-    settings = get_settings()
+    clear_login_failures(db, identifier_hash)
     token, session = create_user_session(
         db,
         user=user,
