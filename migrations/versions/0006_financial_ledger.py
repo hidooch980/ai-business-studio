@@ -126,7 +126,8 @@ def upgrade() -> None:
                 SELECT debit_total_minor, credit_total_minor
                   INTO target_debit, target_credit
                   FROM journal_entries
-                 WHERE tenant_id = NEW.tenant_id AND id = NEW.journal_entry_id;
+                 WHERE tenant_id = NEW.tenant_id AND id = NEW.journal_entry_id
+                 FOR UPDATE;
                 SELECT COALESCE(SUM(debit_minor), 0), COALESCE(SUM(credit_minor), 0)
                   INTO posted_debit, posted_credit
                   FROM journal_lines
