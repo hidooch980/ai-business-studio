@@ -6,10 +6,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import case, delete, select
-from sqlalchemy.orm import Session
-
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import Session
 
 from backend.app.identity.models import LoginRateLimit, Membership, MembershipRole, Tenant, User, UserSession
 from backend.app.identity.security import (
