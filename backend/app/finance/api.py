@@ -10,6 +10,7 @@ from backend.app.db.session import get_db_session
 from backend.app.finance.ledger import (
     JournalConflictError,
     create_journal_entry,
+    reverse_journal_entry,
     serialize_journal_entry,
 )
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
@@ -74,3 +75,30 @@ def list_journals(
         statement.order_by(JournalEntry.created_at.desc(), JournalEntry.id.desc()).limit(limit)
     ).all()
     return {"items": [serialize_journal_entry(db, entry) for entry in entries]}
+
+
+
+@router.post("/{journal_entry_id}/reverse", status_code=status.HTTP_201_CREATED)
+def reverse_journal(
+    journal_entry_id: UUID,
+    idempotency_key: Annotated[
+        str, Header(alias="Idempotency-Key", min_length=1, max_length=128)
+    ],
+    principal: TenantPrincipal = Depends(require_permission("finance.write")),
+    _csrf: None = Depends(require_csrf_protection),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    try:
+        entry, created = reverse_journal_entry(
+            db,
+            tenant_id=principal.tenant.id,
+            actor_user_id=principal.user.id,
+            journal_entry_id=journal_entry_id,
+            idempotency_key=idempotency_key,
+        )
+    except JournalConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        code = status.HTTP_404_NOT_FOUND if str(exc) == "Journal entry not found" else status.HTTP_422_UNPROCESSABLE_CONTENT
+        raise HTTPException(status_code=code, detail=str(exc)) from exc
+    return {**serialize_journal_entry(db, entry), "created": created, "reversal_of_id": str(journal_entry_id)}
