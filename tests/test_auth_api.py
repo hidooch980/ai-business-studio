@@ -12,7 +12,8 @@ from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
-from backend.app.identity.models import Membership, MembershipRole, Permission, Role, RolePermission, Tenant, User
+from backend.app.identity.models import Membership, MembershipRole, Permission, Role, RolePermission, Tenant, TenantInvitation, User
+from backend.app.identity.security import hash_session_token
 from backend.app.main import create_app
 
 
