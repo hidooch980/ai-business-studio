@@ -76,9 +76,6 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         assert "fk_journal_line_tenant_financial_account" in {
             item["name"] for item in inspect(engine).get_foreign_keys("journal_lines")
         }
-        assert "journal_lines_no_update" in {
-            item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
-        } or True
         assert "ck_journal_line_one_sided" in {
             item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
         }
@@ -133,6 +130,12 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
                 ),
                 {"id": uuid4().hex, "tenant": tenant_id, "entry": entry_id},
             )
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text("UPDATE journal_lines SET memo = 'tampered' WHERE journal_entry_id = :entry"),
+                    {"entry": entry_id},
+                )
         with pytest.raises(DBAPIError, match="totals cannot be exceeded"):
             with engine.begin() as connection:
                 connection.execute(
