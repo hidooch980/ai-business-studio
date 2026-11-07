@@ -2,22 +2,35 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.identity.models import AuditEvent, FinancialAccount, JournalEntry, JournalLine
+from backend.app.identity.models import (
+    AuditEvent,
+    FinancialAccount,
+    FinancialPeriod,
+    JournalEntry,
+    JournalLine,
+    Tenant,
+)
 
 
 class JournalConflictError(ValueError):
     """Raised when an idempotency key is reused with different journal data."""
 
 
-def _normalized_payload(currency: str, description: str, lines: list[dict]) -> dict:
+class AccountingPeriodConflictError(ValueError):
+    """Raised when a journal cannot be posted to an open accounting period."""
+
+
+def _normalized_payload(currency: str, description: str, posting_date: date, lines: list[dict]) -> dict:
     return {
         "currency": currency.upper(),
+        "posting_date": posting_date.isoformat(),
         "description": description.strip(),
         "lines": [
             {
@@ -45,12 +58,14 @@ def create_journal_entry(
     currency: str,
     description: str,
     lines: list[dict],
+    posting_date: date | None = None,
     reversal_of_id: UUID | None = None,
 ) -> tuple[JournalEntry, bool]:
     key = idempotency_key.strip()
     if not key or len(key) > 128:
         raise ValueError("Idempotency-Key must contain 1 to 128 characters")
-    payload = _normalized_payload(currency, description, lines)
+    effective_posting_date = posting_date or datetime.now(UTC).date()
+    payload = _normalized_payload(currency, description, effective_posting_date, lines)
     if len(payload["currency"]) != 3 or not payload["currency"].isalpha() or not payload["currency"].isascii():
         raise ValueError("Currency must be a three-letter ISO-style code")
     if not payload["description"] or len(payload["description"]) > 500:
@@ -62,7 +77,7 @@ def create_journal_entry(
     credit_total = 0
     for item in normalized_lines:
         if not item["account_code"] or len(item["account_code"]) > 32:
-            raise ValueError("Every line requires an account code of at most 64 characters")
+            raise ValueError("Every line requires an account code of at most 32 characters")
         if item["memo"] is not None and len(item["memo"]) > 255:
             raise ValueError("Line memo must not exceed 255 characters")
         debit = item["debit_minor"]
@@ -102,12 +117,28 @@ def create_journal_entry(
     if missing_accounts:
         raise ValueError(f"Unknown or inactive financial account code(s): {', '.join(missing_accounts)}")
 
+    tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
+    if tenant is None:
+        raise AccountingPeriodConflictError("Tenant not found for journal posting")
+    period = db.scalar(
+        select(FinancialPeriod)
+        .where(
+            FinancialPeriod.tenant_id == tenant_id,
+            FinancialPeriod.start_date <= effective_posting_date,
+            FinancialPeriod.end_date >= effective_posting_date,
+        )
+        .with_for_update()
+    )
+    if period is None or period.status != "open":
+        raise AccountingPeriodConflictError("No open accounting period covers the journal posting date")
+
     entry = JournalEntry(
         tenant_id=tenant_id,
         idempotency_key=key,
         request_hash=digest,
         reversal_of_id=reversal_of_id,
         currency=payload["currency"],
+        posting_date=effective_posting_date,
         description=payload["description"],
         debit_total_minor=debit_total,
         credit_total_minor=credit_total,
@@ -176,6 +207,7 @@ def serialize_journal_entry(db: Session, entry: JournalEntry) -> dict:
         "id": str(entry.id),
         "tenant_id": str(entry.tenant_id),
         "currency": entry.currency,
+        "posting_date": entry.posting_date.isoformat() if entry.posting_date else None,
         "description": entry.description,
         "created_at": entry.created_at.isoformat(),
         "lines": [
