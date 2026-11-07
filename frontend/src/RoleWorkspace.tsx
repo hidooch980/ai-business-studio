@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./role-workspaces.css";
+import WorkspaceTools from "./WorkspaceTools";
 
 type Role = "owner" | "manager" | "employee" | "customer";
 type RoleConfig = {
@@ -71,6 +72,7 @@ const roleOptions: { id: Role; icon: string }[] = [
 export default function RoleWorkspace({ onHome }: { onHome: () => void }) {
   const [role, setRole] = useState<Role>("owner");
   const [active, setActive] = useState(roleConfig.owner.nav[0]);
+  const [showMetrics, setShowMetrics] = useState(true);
   const config = roleConfig[role];
   const pageTitle = active === config.nav[0] ? config.focusTitle : active;
 
@@ -90,7 +92,9 @@ export default function RoleWorkspace({ onHome }: { onHome: () => void }) {
       <header className="dash-header role-header"><div><small>{config.workspace} / پیش‌نمایش</small><h1>{pageTitle}</h1></div><div className="dash-header-actions"><span className="demo-tag">● محیط نمایشی</span><button className="icon-button" aria-label="اعلان‌ها">♧</button></div></header>
       <div className="role-switcher" aria-label="انتخاب پیش‌نمایش نقش">{roleOptions.map(option => <button key={option.id} className={role === option.id ? "selected" : ""} aria-pressed={role === option.id} onClick={() => changeRole(option.id)}><span>{option.icon}</span>{roleConfig[option.id].label}</button>)}</div>
       <div className="demo-warning">این محیط فقط برای نمایش طراحی نقش‌هاست؛ انتخاب نقش در اینجا ورود یا تغییر سطح دسترسی واقعی ایجاد نمی‌کند و اطلاعات آن نمونه هستند.</div>
-      <section className="metric-grid">{config.metrics.map((metric, index) => <article className="metric-card" key={metric[0]}><div className="metric-top"><span>{metric[0]}</span><i>{["↗", "▣", "♙", "!"][index]}</i></div><b className="metric-value">{metric[1]} <small>{metric[2]}</small></b><span className="metric-positive">{metric[3]}</span></article>)}</section>
+      <WorkspaceTools role={role} showMetrics={showMetrics} onToggleMetrics={() => setShowMetrics(value => !value)} />
+      {showMetrics && <section className="metric-grid">{config.metrics.map((metric, index) => <article className="metric-card" key={metric[0]}><div className="metric-top"><span>{metric[0]}</span><i>{["↗", "▣", "♙", "!"][index]}</i></div><b className="metric-value">{metric[1]} <small>{metric[2]}</small></b><span className="metric-positive">{metric[3]}</span></article>)}</section>
+      }
       <section className="role-content-grid">
         <article className="panel role-focus"><div className="panel-heading"><div><h2>{config.focusTitle}</h2><p>نمای متناسب با نقش انتخاب‌شده</p></div><span className="count-pill">AI</span></div><p className="role-focus-copy">{config.focus}</p><div className="role-action-list">{config.actions.map((action, index) => <button key={action} onClick={() => setActive(config.nav[Math.min(index + 1, config.nav.length - 1)])}><span>{["↗", "＋", "⌕", "✓"][index]}</span>{action}<b>←</b></button>)}</div></article>
         <article className="panel"><div className="panel-heading"><div><h2>{config.activityTitle}</h2><p>موارد نمونه برای پیش‌نمایش</p></div><span className="count-pill">{config.activity.length}</span></div><div className="alert-list role-activity">{config.activity.map((item, index) => <div key={item[0]}><i className={`alert-dot ${["amber", "blue", "red"][index]}`} /><span><b>{item[0]}</b><small>{item[1]}</small></span></div>)}</div></article>
