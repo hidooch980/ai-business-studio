@@ -48,6 +48,7 @@ Implemented in the foundation branch:
 - SQLite identity/migration tests and PostgreSQL 16 integration tests, including concurrent last-active-owner deactivation protection.
 - CI matrix for Python 3.11/3.12 with PostgreSQL 16, strict pytest warnings, Ruff, dependency vulnerability audit, Compose validation, and a production Docker image build.
 - Container deployment foundation: non-root application image, read-only runtime filesystem, local-only port binding, PostgreSQL storage, and separate application/migration database roles. See [container deployment](docs/deployment/CONTAINER.md).
+- Encrypted PostgreSQL backup and guarded restore utilities with SHA-256 verification, explicit restore confirmation and single-transaction restore. See [backup and restore runbook](docs/deployment/BACKUP_RESTORE.md); scheduled off-host backups and a real restore rehearsal remain outstanding.
 - Production configuration rejects SQLite/missing DATABASE_URL and insecure session cookies; SQLite foreign-key enforcement is enabled per connection.
 - CI runs a Python dependency vulnerability audit, Compose validation and Docker build after the test/lint stages.
 
