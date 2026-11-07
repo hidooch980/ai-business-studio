@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
-from backend.app.identity.models import AuditEvent, FinancialAccount
+from backend.app.identity.models import AuditEvent, FinancialAccount, JournalLine
 
 router = APIRouter(prefix="/finance/accounts", tags=["finance-accounts"])
 
@@ -167,6 +167,19 @@ def update_account(
     if "description" in payload.model_fields_set:
         account.description = payload.description
     if payload.is_active is False and account.is_active:
+        posted_line = db.scalar(
+            select(JournalLine.id)
+            .where(
+                JournalLine.tenant_id == principal.tenant.id,
+                JournalLine.financial_account_id == account.id,
+            )
+            .limit(1)
+        )
+        if posted_line is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account referenced by posted journal lines cannot be deactivated",
+            )
         active_child = db.scalar(
             select(FinancialAccount.id).where(
                 FinancialAccount.tenant_id == principal.tenant.id,
