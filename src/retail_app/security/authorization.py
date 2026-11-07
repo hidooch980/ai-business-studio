@@ -107,6 +107,7 @@ def authorize(
     if context.role in {Role.BRANCH_MANAGER, Role.EMPLOYEE}:
         if resource.branch_id is None or resource.branch_id not in context.branch_ids:
             raise AccessDenied("branch scope denied")
-    elif context.role is Role.CUSTOMER:
-        if resource.owner_id is None or resource.owner_id != context.subject_id:
-            raise AccessDenied("customer ownership scope denied")
+    elif context.role is Role.CUSTOMER and (
+        resource.owner_id is None or resource.owner_id != context.subject_id
+    ):
+        raise AccessDenied("customer ownership scope denied")
