@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -189,6 +190,7 @@ class JournalEntry(Base):
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     reversal_of_id: Mapped[UUID | None] = mapped_column(Uuid)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    posting_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     debit_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
     credit_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -297,3 +299,27 @@ class TenantInvitation(Base):
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+
+class FinancialPeriod(Base):
+    __tablename__ = "financial_periods"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_financial_period_tenant_name"),
+        UniqueConstraint("tenant_id", "id", name="uq_financial_period_tenant_id_id"),
+        CheckConstraint("start_date <= end_date", name="ck_financial_period_date_range"),
+        CheckConstraint("status IN ('open', 'closed')", name="ck_financial_period_status"),
+        Index("ix_financial_periods_tenant_dates", "tenant_id", "start_date", "end_date"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="open", nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    closed_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
