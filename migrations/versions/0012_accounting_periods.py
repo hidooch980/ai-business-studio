@@ -48,11 +48,53 @@ def upgrade() -> None:
         op.execute(sa.text("UPDATE journal_entries SET posting_date = created_at::date WHERE posting_date IS NULL"))
     elif dialect == "sqlite":
         op.execute(sa.text("UPDATE journal_entries SET posting_date = date(created_at) WHERE posting_date IS NULL"))
+        op.execute(sa.text("""
+            CREATE TRIGGER journal_entries_require_open_period
+            BEFORE INSERT ON journal_entries
+            WHEN NOT EXISTS (
+                SELECT 1 FROM financial_periods
+                 WHERE tenant_id = NEW.tenant_id
+                   AND start_date <= NEW.posting_date
+                   AND end_date >= NEW.posting_date
+                   AND status = 'open'
+            )
+            BEGIN SELECT RAISE(ABORT, 'journal posting requires an open accounting period'); END
+        """))
+    elif dialect == "postgresql":
+        op.execute(sa.text("""
+            CREATE FUNCTION enforce_journal_period_open()
+            RETURNS trigger LANGUAGE plpgsql AS $period$
+            DECLARE period_status text;
+            BEGIN
+                SELECT status INTO period_status
+                  FROM financial_periods
+                 WHERE tenant_id = NEW.tenant_id
+                   AND start_date <= NEW.posting_date
+                   AND end_date >= NEW.posting_date
+                 FOR UPDATE;
+                IF period_status IS DISTINCT FROM 'open' THEN
+                    RAISE EXCEPTION 'journal posting requires an open accounting period';
+                END IF;
+                RETURN NEW;
+            END;
+            $period$
+        """))
+        op.execute(sa.text("""
+            CREATE TRIGGER journal_entries_require_open_period
+            BEFORE INSERT ON journal_entries
+            FOR EACH ROW EXECUTE FUNCTION enforce_journal_period_open()
+        """))
     else:
         raise RuntimeError(f"Unsupported database dialect for accounting periods: {dialect}")
 
 
 def downgrade() -> None:
+    dialect = op.get_bind().dialect.name
+    if dialect == "sqlite":
+        op.execute(sa.text("DROP TRIGGER IF EXISTS journal_entries_require_open_period"))
+    elif dialect == "postgresql":
+        op.execute(sa.text("DROP TRIGGER IF EXISTS journal_entries_require_open_period ON journal_entries"))
+        op.execute(sa.text("DROP FUNCTION IF EXISTS enforce_journal_period_open()"))
     op.drop_column("journal_entries", "posting_date")
     op.drop_index("ix_financial_periods_tenant_dates", table_name="financial_periods")
     op.drop_table("financial_periods")
