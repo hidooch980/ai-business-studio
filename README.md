@@ -35,6 +35,7 @@ Implemented in the foundation branch:
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
 - Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, and SQLite/PostgreSQL mutation and overposting guards.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
+- Authenticated users can list their own recent sessions and revoke individual sessions, including the current session; revocation is CSRF-protected and audited.
 - Session-bound CSRF tokens are stored as digests and exposed in a separate readable SameSite=Lax cookie; unsafe authentication requests require a matching `X-CSRF-Token` header and same-host Origin/Referer validation when those headers are present.
 - Public self-registration is disabled by default and requires explicit environment configuration.
 - Successful registration/login and denied login audit events; persistent, database-backed login throttling keyed by an HMAC of normalized email and client IP (default 8 failures per 5 minutes, 15-minute lock); production requires a unique `AUTH_RATE_LIMIT_SECRET` of at least 32 characters.
@@ -43,7 +44,7 @@ Implemented in the foundation branch:
 - CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service and strict pytest warnings.
 
 Not implemented and still required before production use:
-- MFA, account recovery, expanded abuse monitoring, and full session/device management.
+- MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
 - Production configuration now rejects SQLite/missing DATABASE_URL and insecure session cookies; SQLite foreign-key enforcement is enabled per connection.
 - CI runs a Python dependency vulnerability audit after tests.
 - Production-grade security review, rate limiting for invitation creation beyond its current bounded policy, and concurrency/integration testing against production PostgreSQL.
