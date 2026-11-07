@@ -21,6 +21,7 @@ jobs:
           POSTGRES_USER: app
           POSTGRES_PASSWORD: app-test-password
           POSTGRES_DB: ai_business_studio_test
+          POSTGRES_INITDB_ARGS: "--auth-local=scram-sha-256 --auth-host=scram-sha-256"
         ports:
           - 5432:5432
         options: >-
