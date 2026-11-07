@@ -104,6 +104,7 @@ def test_auth_api_rejects_invalid_credentials_and_duplicate_registration(auth_cl
     invalid = auth_client.post(
         "/api/v1/auth/login",
         json={"email": "duplicate@example.test", "password": "not the password"},
+        headers={"X-CSRF-Token": csrf_token},
     )
     assert invalid.status_code == 401
     assert invalid.json() == {"detail": "Invalid email or password"}
