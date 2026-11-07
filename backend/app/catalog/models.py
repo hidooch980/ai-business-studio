@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db.base import Base
-\ndef utc_now() -> datetime:\n    return datetime.now(UTC)\n
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 class Product(Base):
@@ -15,6 +18,8 @@ class Product(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),
         UniqueConstraint("tenant_id", "barcode", name="uq_products_tenant_barcode"),
+        CheckConstraint("length(trim(sku)) > 0", name="ck_products_sku_nonempty"),
+        CheckConstraint("length(trim(name)) > 0", name="ck_products_name_nonempty"),
         Index("ix_products_tenant_active_name", "tenant_id", "is_active", "name"),
     )
 
