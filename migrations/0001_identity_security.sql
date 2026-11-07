@@ -43,10 +43,6 @@ CREATE TABLE tenant_memberships (
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('invited', 'active', 'suspended', 'revoked')),
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, identity_id),
-    CHECK (
-      (role = 'customer' AND true)
-      OR (role IN ('owner_admin', 'branch_manager', 'employee'))
-    )
 );
 CREATE INDEX tenant_memberships_identity_idx ON tenant_memberships(identity_id, status);
 
@@ -126,7 +122,7 @@ DECLARE
     table_name text;
 BEGIN
     FOREACH table_name IN ARRAY ARRAY[
-        'tenants', 'branches', 'tenant_memberships', 'branch_memberships',
+        'branches', 'tenant_memberships', 'branch_memberships',
         'auth_sessions', 'otp_challenges', 'security_audit_events'
     ] LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
@@ -136,7 +132,13 @@ BEGIN
             table_name
         );
     END LOOP;
-END $$;
+END $;
+
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_self_scope ON tenants
+USING (id = nullif(current_setting('app.tenant_id', true), '')::uuid)
+WITH CHECK (id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 
 -- Identities are visible only when they are the current subject or share the
 -- current tenant through a membership. The policy remains deny-by-default.
