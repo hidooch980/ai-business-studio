@@ -36,7 +36,9 @@ class JournalCreateRequest(BaseModel):
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_journal(
     payload: JournalCreateRequest,
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+    idempotency_key: Annotated[
+        str, Header(alias="Idempotency-Key", min_length=1, max_length=128)
+    ],
     principal: TenantPrincipal = Depends(require_permission("finance.write")),
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
