@@ -7,6 +7,8 @@ PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
     ("users.manage", "Manage tenant memberships"),
     ("finance.read", "View financial records"),
     ("finance.write", "Create and update financial records"),
+    ("catalog.read", "View tenant product catalog"),
+    ("catalog.write", "Create and update tenant product catalog"),
     ("inventory.read", "View inventory"),
     ("inventory.write", "Manage inventory"),
     ("sales.read", "View sales records"),
