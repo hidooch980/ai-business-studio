@@ -79,13 +79,14 @@ def upgrade() -> None:
     owner_ids = connection.execute(
         sa.select(roles.c.id).where(roles.c.name == "owner", roles.c.is_system.is_(True))
     ).scalars().all()
-    existing_assignments = set(
-        connection.execute(
+    existing_assignments = {
+        (row[0], row[1])
+        for row in connection.execute(
             sa.select(role_permissions.c.role_id, role_permissions.c.permission_id).where(
                 role_permissions.c.permission_id.in_(list(existing.values()))
             )
         ).all()
-    )
+    }
     for role_id in owner_ids:
         for permission_id in existing.values():
             if (role_id, permission_id) not in existing_assignments:
