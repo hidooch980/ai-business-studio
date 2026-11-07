@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, StringConstraints, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -185,7 +185,7 @@ def update_account(
                 FinancialAccount.id == account.parent_account_id,
                 FinancialAccount.tenant_id == principal.tenant.id,
                 FinancialAccount.is_active.is_(True),
-            )
+            ).with_for_update()
         )
         if parent_active is None:
             raise HTTPException(
