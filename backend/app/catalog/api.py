@@ -9,9 +9,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
+from backend.app.catalog.models import Product
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
 from backend.app.identity.models import AuditEvent
-from backend.app.catalog.models import Product
 
 router = APIRouter(prefix="/catalog/products", tags=["product-catalog"])
 
