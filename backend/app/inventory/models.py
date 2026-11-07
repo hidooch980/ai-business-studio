@@ -72,6 +72,7 @@ class InventoryMovement(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "idempotency_key", name="uq_inventory_movement_tenant_idempotency"),
         CheckConstraint("quantity_delta <> 0", name="ck_inventory_movement_nonzero"),
+        CheckConstraint("movement_type IN ('receipt', 'issue', 'adjustment')", name="ck_inventory_movement_type"),
         CheckConstraint("length(trim(idempotency_key)) > 0", name="ck_inventory_movement_idempotency_nonempty"),
         ForeignKeyConstraint(
             ["tenant_id", "warehouse_id"],
