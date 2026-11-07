@@ -106,7 +106,7 @@ def assign_role_to_membership(
     role = db.get(Role, role_id)
     if role is None or role.tenant_id != membership.tenant_id:
         raise ValueError("Role and membership must belong to the same tenant")
-    assignment = MembershipRole(membership_id=membership.id, role_id=role.id)
+    assignment = MembershipRole(tenant_id=membership.tenant_id, membership_id=membership.id, role_id=role.id)
     db.add(assignment)
     db.flush()
     return assignment
