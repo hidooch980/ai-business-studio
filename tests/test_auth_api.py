@@ -17,7 +17,6 @@ from backend.app.identity.api_dependencies import (
     require_permission,
 )
 from backend.app.identity.models import (
-    UserSession,
     JournalEntry,
     JournalLine,
     Membership,
@@ -28,6 +27,7 @@ from backend.app.identity.models import (
     Tenant,
     TenantInvitation,
     User,
+    UserSession,
 )
 from backend.app.identity.security import hash_session_token
 from backend.app.identity.service import create_csrf_token, create_user_session
