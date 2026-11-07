@@ -246,8 +246,10 @@ def test_postgresql_concurrent_owner_deactivation_preserves_last_owner() -> None
                 display_name="Second owner",
             )
             role = Role(id=owner_role_id, tenant_id=tenant_id, name="owner", is_system=True)
+            db.add(tenant)
+            db.flush()
             db.add_all([
-                tenant, actor, first_owner, second_owner, role,
+                actor, first_owner, second_owner, role,
                 Membership(id=actor_membership_id, tenant_id=tenant_id, user_id=actor_user_id),
                 Membership(id=first_membership_id, tenant_id=tenant_id, user_id=first_user_id),
                 Membership(id=second_membership_id, tenant_id=tenant_id, user_id=second_user_id),
