@@ -1,11 +1,12 @@
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.db.base import Base
-from backend.app.identity.models import Role, Tenant, User
+from backend.app.identity.models import Membership, MembershipRole, Role, Tenant, User
 from backend.app.identity.service import (
     assign_role_to_membership,
     authenticate_user,
@@ -84,5 +85,56 @@ def test_role_assignment_rejects_cross_tenant_role() -> None:
             db.flush()
             with pytest.raises(ValueError, match="same tenant"):
                 assign_role_to_membership(db, membership=membership, role_id=role.id)
+    finally:
+        engine.dispose()
+
+
+def test_database_rejects_cross_tenant_membership_role_assignment() -> None:
+    engine = create_engine("sqlite://")
+
+    @event.listens_for(engine, "connect")
+    def enable_sqlite_foreign_keys(connection, _record) -> None:
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            tenant_a = Tenant(name="A", slug="tenant-a")
+            tenant_b = Tenant(name="B", slug="tenant-b")
+            user = User(email="db-guard@example.test", password_hash="unused", display_name="DB Guard")
+            db.add_all([tenant_a, tenant_b, user])
+            db.flush()
+            membership = Membership(tenant_id=tenant_a.id, user_id=user.id)
+            role = Role(tenant_id=tenant_b.id, name="admin")
+            db.add_all([membership, role])
+            db.flush()
+
+            db.add(
+                MembershipRole(
+                    tenant_id=tenant_a.id,
+                    membership_id=membership.id,
+                    role_id=role.id,
+                )
+            )
+            with pytest.raises(IntegrityError):
+                db.flush()
+            db.rollback()
+    finally:
+        engine.dispose()
+
+
+def test_database_enforces_case_insensitive_email_uniqueness() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            db.add(User(email="Person@Example.test", password_hash="unused", display_name="First"))
+            db.commit()
+            db.add(User(email="person@example.test", password_hash="unused", display_name="Second"))
+            with pytest.raises(IntegrityError):
+                db.flush()
+            db.rollback()
     finally:
         engine.dispose()
