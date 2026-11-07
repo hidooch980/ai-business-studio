@@ -3,7 +3,20 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, String, UniqueConstraint, Uuid, func, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -180,7 +193,10 @@ class JournalLine(Base):
         ),
         UniqueConstraint("journal_entry_id", "line_number", name="uq_journal_line_number"),
         CheckConstraint("debit_minor >= 0 AND credit_minor >= 0", name="ck_journal_line_nonnegative"),
-        CheckConstraint("(debit_minor > 0 AND credit_minor = 0) OR (credit_minor > 0 AND debit_minor = 0)", name="ck_journal_line_one_sided"),
+        CheckConstraint(
+            "(debit_minor > 0 AND credit_minor = 0) OR (credit_minor > 0 AND debit_minor = 0)",
+            name="ck_journal_line_one_sided",
+        ),
         Index("ix_journal_lines_tenant_entry", "tenant_id", "journal_entry_id"),
     )
 
