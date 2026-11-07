@@ -204,6 +204,11 @@ class JournalLine(Base):
             ["journal_entries.tenant_id", "journal_entries.id"],
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "financial_account_id"],
+            ["financial_accounts.tenant_id", "financial_accounts.id"],
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("journal_entry_id", "line_number", name="uq_journal_line_number"),
         CheckConstraint("debit_minor >= 0 AND credit_minor >= 0", name="ck_journal_line_nonnegative"),
         CheckConstraint(
@@ -211,6 +216,7 @@ class JournalLine(Base):
             name="ck_journal_line_one_sided",
         ),
         Index("ix_journal_lines_tenant_entry", "tenant_id", "journal_entry_id"),
+        Index("ix_journal_lines_tenant_financial_account", "tenant_id", "financial_account_id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
