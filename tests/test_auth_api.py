@@ -854,6 +854,16 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     assert created.json()["posting_date"]
     assert len(created.json()["lines"]) == 2
     assert all(line["financial_account_id"] for line in created.json()["lines"])
+    report = auth_client.get(
+        "/api/v1/finance/reports/trial-balance",
+        params={"as_of": "2100-12-31", "currency": "usd"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert report.status_code == 200
+    assert report.json()["is_balanced"] is True
+    assert report.json()["total_debits_minor"] == 12500
+    assert report.json()["total_credits_minor"] == 12500
+    assert report.json()["unmapped_journal_lines"] == 0
     replay = auth_client.post("/api/v1/finance/journals", json=payload, headers=headers)
     assert replay.status_code == 201
     assert replay.json()["created"] is False
