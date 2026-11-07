@@ -34,6 +34,7 @@ Manufacturing, industrial maintenance, fleet management, project management and 
 - [Loyalty and manager/employee/customer applications](docs/LOYALTY_AND_APPS_SPEC.md)
 - [OTP authentication and session security](docs/AUTH_OTP_SECURITY_SPEC.md)
 - [Backend authorization core and integration contract](docs/BACKEND_AUTHORIZATION_CORE.md)
+- [PostgreSQL identity and security schema](docs/POSTGRES_IDENTITY_SECURITY_SCHEMA.md)
 - [AI Decision Engine specification](docs/AI_DECISION_ENGINE_SPEC.md)
 - [AI retail product roadmap](docs/AI_AUTONOMOUS_RETAIL_ROADMAP.md)
 - [Reporting and BI specification](docs/REPORTING_AND_BI_SPEC.md)
@@ -51,7 +52,7 @@ A first responsive React + TypeScript + Vite UI prototype lives in `frontend/`.
 - Local preview tools for role-filtered search, sample notifications, approval review markers and dashboard widget visibility.
 - Frontend CI type-checks and builds the Vite app.
 
-A first backend security primitive now enforces deny-by-default role permissions, tenant isolation, branch membership and customer ownership at service boundaries; see [backend authorization core](docs/BACKEND_AUTHORIZATION_CORE.md). This is not a complete authentication/session/API service. The role workspace tools are local UI demonstrations only. Search uses a static index; notification and approval state is in-memory; dashboard preferences are not persisted. Authentication, backend APIs, live data, payment flows, durable approvals/notifications, user preferences and server-side role authorization still require implementation and integration. See [role permission matrix and workspace UX contract](docs/ROLE_PERMISSION_MATRIX.md).
+A backend authorization policy primitive enforces deny-by-default role permissions, tenant isolation, branch membership and customer ownership at service boundaries; a PostgreSQL identity/session/OTP/audit schema migration is authored but not yet applied to a live database. See [backend authorization core](docs/BACKEND_AUTHORIZATION_CORE.md) and [PostgreSQL identity/security schema](docs/POSTGRES_IDENTITY_SECURITY_SCHEMA.md). This is not a complete authentication/session/API service. The role workspace tools are local UI demonstrations only. Search uses a static index; notification and approval state is in-memory; dashboard preferences are not persisted. Authentication, backend APIs, live data, payment flows, durable approvals/notifications, user preferences and server-side role authorization still require implementation and integration. See [role permission matrix and workspace UX contract](docs/ROLE_PERMISSION_MATRIX.md).
 
 ## UX/UI design foundation
 
