@@ -172,6 +172,12 @@ def login_identifier_hash(email: str, client_ip: str, secret: str) -> str:
     return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
 
 
+def login_ip_identifier_hash(client_ip: str, secret: str) -> str:
+    """Return a keyed identifier shared by login attempts from the same client IP."""
+    material = f"ip\0{client_ip}".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
+
+
 def is_login_locked(db: Session, identifier_hash: str) -> bool:
     record = db.scalar(select(LoginRateLimit).where(LoginRateLimit.identifier_hash == identifier_hash))
     if record is None or record.locked_until is None:
