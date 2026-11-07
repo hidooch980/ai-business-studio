@@ -136,6 +136,8 @@ def require_csrf_protection(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Untrusted request origin")
     session_token = request.cookies.get(settings.session_cookie_name)
     if not session_token:
+        if not source_origin:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Request origin is required")
         return
     session = get_active_session(db, session_token)
     if session is None:
