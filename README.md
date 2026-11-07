@@ -33,7 +33,7 @@ Implemented in the foundation branch:
 - HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
 - Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; email delivery remains manual until a provider is configured.
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
-- Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, tenant-scoped journal listing, audit events, and SQLite/PostgreSQL mutation guards.
+- Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, and SQLite/PostgreSQL mutation and overposting guards.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Session-bound CSRF tokens are stored as digests and exposed in a separate readable SameSite=Lax cookie; unsafe authentication requests require a matching `X-CSRF-Token` header and same-host Origin/Referer validation when those headers are present.
 - Public self-registration is disabled by default and requires explicit environment configuration.
@@ -45,7 +45,7 @@ Implemented in the foundation branch:
 Not implemented and still required before production use:
 - MFA, account recovery, expanded abuse monitoring, and full session/device management.
 - Production-grade security review, rate limiting for invitation creation beyond its current bounded policy, and concurrency/integration testing against production PostgreSQL.
-- Complete accounting domain: chart of accounts, posting periods, reversal/adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
+- Complete accounting domain: chart of accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
 
 - Product, inventory, POS, procurement, CRM, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
 
