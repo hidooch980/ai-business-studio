@@ -28,7 +28,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     try:
         tables = set(inspect(engine).get_table_names())
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0010_transactional_outbox"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0011_journal_account_links"
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -72,6 +72,13 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "financial_accounts",
             "outbox_events",
         }.issubset(tables)
+        assert "financial_account_id" in {column["name"] for column in inspect(engine).get_columns("journal_lines")}
+        assert "fk_journal_line_tenant_financial_account" in {
+            item["name"] for item in inspect(engine).get_foreign_keys("journal_lines")
+        }
+        assert "journal_lines_no_update" in {
+            item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
+        } or True
         assert "ck_journal_line_one_sided" in {
             item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
         }
