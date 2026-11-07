@@ -22,6 +22,7 @@ class Settings:
     log_level: str
     database_url: str | None
     session_cookie_name: str
+    csrf_cookie_name: str
     session_cookie_secure: bool
     session_lifetime_seconds: int
     allow_public_registration: bool
@@ -39,6 +40,7 @@ def get_settings() -> Settings:
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         database_url=database_url.strip() if database_url and database_url.strip() else None,
         session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "abs_session"),
+        csrf_cookie_name=os.getenv("CSRF_COOKIE_NAME", "abs_csrf"),
         session_cookie_secure=_env_bool("SESSION_COOKIE_SECURE", True),
         session_lifetime_seconds=lifetime,
         allow_public_registration=_env_bool("ALLOW_PUBLIC_REGISTRATION", False),
