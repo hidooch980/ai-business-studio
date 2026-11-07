@@ -35,7 +35,7 @@ class MovementCreateRequest(BaseModel):
     product_id: UUID
     movement_type: Literal["receipt", "issue", "adjustment"]
     quantity: int | None = Field(default=None, gt=0, le=2_000_000_000)
-    adjustment_delta: int | None = Field(default=None, ne=0, ge=-2_000_000_000, le=2_000_000_000)
+    adjustment_delta: int | None = Field(default=None, ge=-2_000_000_000, le=2_000_000_000)
     reference: Reference | None = None
 
     @model_validator(mode="after")
@@ -43,8 +43,8 @@ class MovementCreateRequest(BaseModel):
         if self.movement_type in {"receipt", "issue"}:
             if self.quantity is None or self.adjustment_delta is not None:
                 raise ValueError("receipt and issue require quantity and do not accept adjustment_delta")
-        elif self.quantity is not None or self.adjustment_delta is None:
-            raise ValueError("adjustment requires adjustment_delta and does not accept quantity")
+        elif self.quantity is not None or self.adjustment_delta is None or self.adjustment_delta == 0:
+            raise ValueError("adjustment requires a non-zero adjustment_delta and does not accept quantity")
         return self
 
     @property
