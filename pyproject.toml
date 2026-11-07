@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=84.1.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-business-studio"
+version = "0.1.0"
+description = "Modular, offline-capable business operations platform"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "SQLAlchemy>=2.0,<3.0",
+  "alembic>=1.13,<2.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "argon2-cffi>=23.1,<26.0",
+]
+
+[project.scripts]
+ai-business-studio-outbox = "backend.app.outbox.runner:main"
+
+[project.optional-dependencies]
+dev = [
+  "httpx2>=2.16,<3.0",
+  "pytest>=9.0.3,<10.0",
+  "ruff>=0.6,<1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -W error"
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

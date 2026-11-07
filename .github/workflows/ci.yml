@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://app:app-test-password@localhost:5432/ai_business_studio_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app-test-password
+          POSTGRES_DB: ai_business_studio_test
+          POSTGRES_INITDB_ARGS: "--auth-local=scram-sha-256 --auth-host=scram-sha-256"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d ai_business_studio_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: pytest
+      - name: Dependency audit
+        run: |
+          python -m pip install --upgrade pip "setuptools>=84.1.0"
+          python -m pip install pip-audit
+          pip-audit --skip-editable
+      - name: Validate Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-postgres-password
+          APP_DB_PASSWORD: ci-app-password
+          MIGRATOR_DB_PASSWORD: ci-migrator-password
+          AUTH_RATE_LIMIT_SECRET: ci-auth-rate-limit-secret-0123456789abcdef
+          DATABASE_URL: postgresql+psycopg://abs_app:ci-app-password@db:5432/ai_business_studio
+          MIGRATION_DATABASE_URL: postgresql+psycopg://abs_migrator:ci-migrator-password@db:5432/ai_business_studio
+        run: docker compose config --quiet
+      - name: Check shell and systemd configuration syntax
+        run: |
+          bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
+          grep -Fq "Type=oneshot" deploy/systemd/ai-business-studio-backup.service
+          grep -Fq "NoNewPrivileges=true" deploy/systemd/ai-business-studio-backup.service
+          grep -Fq "Persistent=true" deploy/systemd/ai-business-studio-backup.timer
+      - name: Build production container
+        run: docker build --tag ai-business-studio:ci .

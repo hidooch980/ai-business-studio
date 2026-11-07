@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+: "${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}"
+: "${MIGRATOR_DB_PASSWORD:?MIGRATOR_DB_PASSWORD is required}"
+
+psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+  --set=app_password="$APP_DB_PASSWORD" \
+  --set=migrator_password="$MIGRATOR_DB_PASSWORD" \
+  --set=ON_ERROR_STOP=1 <<'SQL'
+CREATE ROLE abs_migrator LOGIN PASSWORD :'migrator_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+CREATE ROLE abs_app LOGIN PASSWORD :'app_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+GRANT CONNECT ON DATABASE ai_business_studio TO abs_migrator, abs_app;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO abs_migrator;
+GRANT USAGE ON SCHEMA public TO abs_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE abs_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO abs_app;
+SQL

@@ -1,0 +1,26 @@
+[Unit]
+Description=AI Business Studio transactional outbox worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=abs-app
+Group=abs-app
+WorkingDirectory=/opt/ai-business-studio
+EnvironmentFile=/etc/ai-business-studio/worker.env
+ExecStart=/opt/ai-business-studio/.venv/bin/ai-business-studio-outbox
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
