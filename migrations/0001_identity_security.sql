@@ -117,7 +117,7 @@ CREATE INDEX security_audit_actor_time_idx ON security_audit_events(tenant_id, a
 -- SET LOCAL app.tenant_id = '<uuid>';
 -- SET LOCAL app.subject_id = '<uuid>';
 -- Missing settings intentionally match no rows.
-DO $$
+DO $migration$
 DECLARE
     table_name text;
 BEGIN
@@ -132,7 +132,8 @@ BEGIN
             table_name
         );
     END LOOP;
-END $;
+END
+$migration$;
 
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
