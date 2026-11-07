@@ -134,6 +134,51 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
                     {"id": uuid4().hex, "tenant": tenant_id, "entry": entry_id},
                 )
 
+        product_id = uuid4().hex
+        warehouse_id = uuid4().hex
+        movement_id = uuid4().hex
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO products "
+                    "(id, tenant_id, sku, name, unit_code, is_active, created_at, updated_at) "
+                    "VALUES (:id, :tenant, 'SQL-STOCK', 'SQLite stock', 'pcs', 1, "
+                    "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+                ),
+                {"id": product_id, "tenant": tenant_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO warehouses (id, tenant_id, code, name, is_active, created_at, updated_at) "
+                    "VALUES (:id, :tenant, 'SQL-MAIN', 'SQLite main', 1, "
+                    "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+                ),
+                {"id": warehouse_id, "tenant": tenant_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO inventory_movements "
+                    "(id, tenant_id, warehouse_id, product_id, movement_type, quantity_delta, "
+                    "idempotency_key, request_hash, created_by_user_id, created_at) "
+                    "VALUES (:id, :tenant, :warehouse, :product, 'receipt', 5, "
+                    "'sqlite-stock-test', :hash, :user, '2026-01-01 00:00:00')"
+                ),
+                {
+                    "id": movement_id,
+                    "tenant": tenant_id,
+                    "warehouse": warehouse_id,
+                    "product": product_id,
+                    "hash": "0" * 64,
+                    "user": user_id,
+                },
+            )
+        with pytest.raises(DBAPIError, match="inventory_movements are append-only"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text("UPDATE inventory_movements SET quantity_delta = 6 WHERE id = :id"),
+                    {"id": movement_id},
+                )
+
         foreign_tenant_id = uuid4().hex
         foreign_role_id = uuid4().hex
         with engine.begin() as connection:
