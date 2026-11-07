@@ -4,8 +4,10 @@ import sys
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import DBAPIError
+
+from backend.app.db.session import build_engine
 
 
 def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
@@ -22,7 +24,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         text=True,
     )
     assert upgrade.returncode == 0, f"alembic upgrade failed:\\n{upgrade.stdout}\\n{upgrade.stderr}"
-    engine = create_engine(database_url)
+    engine = build_engine(database_url)
     try:
         tables = set(inspect(engine).get_table_names())
         with engine.connect() as connection:
@@ -127,6 +129,42 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
                         "VALUES (:id, :tenant, :entry, 3, 'cash', 1, 0)"
                     ),
                     {"id": uuid4().hex, "tenant": tenant_id, "entry": entry_id},
+                )
+
+        foreign_tenant_id = uuid4().hex
+        foreign_role_id = uuid4().hex
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO tenants (id, name, slug, is_active, created_at) "
+                    "VALUES (:id, 'Foreign tenant', :slug, 1, '2026-01-01 00:00:00')"
+                ),
+                {"id": foreign_tenant_id, "slug": f"foreign-{foreign_tenant_id}"},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO roles (id, tenant_id, name, description, is_system) "
+                    "VALUES (:id, :tenant, 'foreign-role', NULL, 0)"
+                ),
+                {"id": foreign_role_id, "tenant": tenant_id},
+            )
+        with pytest.raises(DBAPIError):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO tenant_invitations "
+                        "(id, tenant_id, email, display_name, role_id, token_hash, created_by_user_id, "
+                        "expires_at, accepted_at, revoked_at, created_at) "
+                        "VALUES (:id, :tenant, 'wrong-tenant@example.test', 'Wrong tenant', :role, :token, "
+                        ":creator, '2027-01-01 00:00:00', NULL, NULL, '2026-01-01 00:00:00')"
+                    ),
+                    {
+                        "id": uuid4().hex,
+                        "tenant": foreign_tenant_id,
+                        "role": foreign_role_id,
+                        "token": uuid4().hex * 2,
+                        "creator": user_id,
+                    },
                 )
     finally:
         engine.dispose()
