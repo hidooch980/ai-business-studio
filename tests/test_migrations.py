@@ -21,6 +21,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     engine = create_engine(database_url)
     try:
         tables = set(inspect(engine).get_table_names())
+        assert "csrf_token_hash" in {column["name"] for column in inspect(engine).get_columns("user_sessions")}
         assert {
             "alembic_version",
             "tenants",
