@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from backend.app.outbox.models import OutboxEvent
@@ -62,27 +62,53 @@ def claim_outbox_events(
     if not 1 <= limit <= 200 or not 5 <= lease_seconds <= 3600:
         raise ValueError("Invalid outbox claim limit or lease duration")
     now = datetime.now(UTC)
+    lease_until = now + timedelta(seconds=lease_seconds)
     eligible = or_(
         (OutboxEvent.status == "pending") & (OutboxEvent.available_at <= now),
         (OutboxEvent.status == "processing") & (OutboxEvent.locked_until <= now),
     )
-    statement = (
-        select(OutboxEvent)
-        .where(eligible)
-        .order_by(OutboxEvent.available_at, OutboxEvent.created_at, OutboxEvent.id)
-        .limit(limit)
-        .with_for_update(skip_locked=db.get_bind().dialect.name == "postgresql")
-    )
-    events = db.scalars(statement).all()
-    for event in events:
-        event.status = "processing"
-        event.attempts += 1
-        event.locked_by = worker_id
-        event.locked_until = now + timedelta(seconds=lease_seconds)
-        event.lease_token = uuid4()
+    dialect = db.get_bind().dialect.name
+    if dialect == "sqlite":
+        # One atomic UPDATE prevents two local workers from claiming the same rows.
+        lease_token = uuid4()
+        candidate_ids = (
+            select(OutboxEvent.id)
+            .where(eligible)
+            .order_by(OutboxEvent.available_at, OutboxEvent.created_at, OutboxEvent.id)
+            .limit(limit)
+        )
+        statement = (
+            update(OutboxEvent)
+            .where(OutboxEvent.id.in_(candidate_ids))
+            .values(
+                status="processing",
+                attempts=OutboxEvent.attempts + 1,
+                locked_by=worker_id,
+                locked_until=lease_until,
+                lease_token=lease_token,
+            )
+            .returning(OutboxEvent)
+        )
+        events = db.scalars(statement).all()
+    elif dialect == "postgresql":
+        statement = (
+            select(OutboxEvent)
+            .where(eligible)
+            .order_by(OutboxEvent.available_at, OutboxEvent.created_at, OutboxEvent.id)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        events = db.scalars(statement).all()
+        for event in events:
+            event.status = "processing"
+            event.attempts += 1
+            event.locked_by = worker_id
+            event.locked_until = lease_until
+            event.lease_token = uuid4()
+    else:
+        raise RuntimeError("Outbox claiming requires SQLite or PostgreSQL")
     db.commit()
     return events
-
 
 def mark_outbox_delivered(db: Session, *, event_id: UUID, lease_token: UUID) -> bool:
     event = db.scalar(select(OutboxEvent).where(OutboxEvent.id == event_id).with_for_update())
