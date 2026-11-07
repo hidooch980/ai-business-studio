@@ -170,6 +170,12 @@ class JournalEntry(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "id", name="uq_journal_entries_tenant_id_id"),
         UniqueConstraint("tenant_id", "idempotency_key", name="uq_journal_entries_tenant_idempotency"),
+        UniqueConstraint("tenant_id", "reversal_of_id", name="uq_journal_reversal_tenant_original"),
+        ForeignKeyConstraint(
+            ["tenant_id", "reversal_of_id"],
+            ["journal_entries.tenant_id", "journal_entries.id"],
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "debit_total_minor > 0 AND debit_total_minor = credit_total_minor",
             name="ck_journal_entry_balanced_totals",
@@ -181,6 +187,7 @@ class JournalEntry(Base):
     tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reversal_of_id: Mapped[UUID | None] = mapped_column(Uuid)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     debit_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
