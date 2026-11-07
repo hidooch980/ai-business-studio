@@ -12,7 +12,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
-from backend.app.identity.models import Membership, MembershipRole, Permission, Role, RolePermission, Tenant
+from backend.app.identity.models import Membership, MembershipRole, Permission, Role, RolePermission, Tenant, User
 from backend.app.main import create_app
 
 
@@ -378,3 +378,119 @@ def test_access_control_mutations_reject_missing_csrf(auth_client: TestClient) -
         headers={"X-Tenant-ID": tenant_id},
     )
     assert response.status_code == 403
+
+
+
+def test_membership_management_lists_members_and_protects_last_owner(auth_client: TestClient) -> None:
+    payload = {
+        "email": "member-admin@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Membership Admin",
+        "tenant_name": "Membership Studio",
+        "tenant_slug": "membership-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    owner_membership_id = registered.json()["memberships"][0]["id"]
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    assert csrf_token
+    headers = {"X-Tenant-ID": tenant_id, "X-CSRF-Token": csrf_token}
+
+    with Session(auth_client.app.state.test_engine) as db:
+        member = User(
+            email="staff-member@example.test",
+            password_hash="not-used-in-this-test",
+            display_name="Staff Member",
+        )
+        db.add(member)
+        db.flush()
+        staff_membership = Membership(tenant_id=UUID(tenant_id), user_id=member.id)
+        db.add(staff_membership)
+        db.commit()
+        staff_membership_id = str(staff_membership.id)
+
+    listed = auth_client.get("/api/v1/access/memberships", headers={"X-Tenant-ID": tenant_id})
+    assert listed.status_code == 200
+    assert len(listed.json()["items"]) == 2
+    staff = next(item for item in listed.json()["items"] if item["id"] == staff_membership_id)
+    assert staff["email"] == "staff-member@example.test"
+    assert staff["is_active"] is True
+
+    self_deactivation = auth_client.patch(
+        f"/api/v1/access/memberships/{owner_membership_id}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert self_deactivation.status_code == 409
+
+    staff_deactivation = auth_client.patch(
+        f"/api/v1/access/memberships/{staff_membership_id}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert staff_deactivation.status_code == 200
+    assert staff_deactivation.json()["is_active"] is False
+
+    staff_reactivation = auth_client.patch(
+        f"/api/v1/access/memberships/{staff_membership_id}",
+        json={"is_active": True},
+        headers=headers,
+    )
+    assert staff_reactivation.status_code == 200
+    assert staff_reactivation.json()["is_active"] is True
+
+    roles = auth_client.get("/api/v1/access/roles", headers={"X-Tenant-ID": tenant_id})
+    owner_role_id = next(item["id"] for item in roles.json()["items"] if item["name"] == "owner")
+    last_owner_removal = auth_client.delete(
+        f"/api/v1/access/memberships/{owner_membership_id}/roles/{owner_role_id}",
+        headers=headers,
+    )
+    assert last_owner_removal.status_code == 409
+
+    missing_member = auth_client.patch(
+        f"/api/v1/access/memberships/{UUID(int=0)}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert missing_member.status_code == 404
+
+
+def test_membership_role_can_be_removed_without_affecting_other_tenants(auth_client: TestClient) -> None:
+    payload = {
+        "email": "role-remove@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Role Remover",
+        "tenant_name": "Role Removal Studio",
+        "tenant_slug": "role-removal-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    membership_id = registered.json()["memberships"][0]["id"]
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    headers = {"X-Tenant-ID": tenant_id, "X-CSRF-Token": csrf_token}
+
+    role = auth_client.post(
+        "/api/v1/access/roles",
+        json={"name": "temporary-reviewer"},
+        headers=headers,
+    )
+    assert role.status_code == 201
+    role_id = role.json()["id"]
+    assigned = auth_client.put(
+        f"/api/v1/access/memberships/{membership_id}/roles/{role_id}",
+        headers=headers,
+    )
+    assert assigned.status_code == 204
+
+    removed = auth_client.delete(
+        f"/api/v1/access/memberships/{membership_id}/roles/{role_id}",
+        headers=headers,
+    )
+    assert removed.status_code == 204
+
+    duplicate_removal = auth_client.delete(
+        f"/api/v1/access/memberships/{membership_id}/roles/{role_id}",
+        headers=headers,
+    )
+    assert duplicate_removal.status_code == 404
