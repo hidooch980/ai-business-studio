@@ -40,6 +40,7 @@ Implemented in the foundation branch:
 - Tenant-scoped chart-of-accounts API with typed asset/liability/equity/income/expense accounts, same-type parent hierarchy, tenant-safe composite foreign keys, duplicate-code protection and guarded deactivation. Journal lines are not yet linked to account IDs.
 - Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, SQLite/PostgreSQL mutation and overposting guards, and journal-line links to active tenant chart accounts.
 - Tenant-scoped accounting periods with overlap prevention, open/close lifecycle, audit events, and journal posting-date enforcement against an open period.
+- Tenant-scoped trial balance report by posting date and currency, with debit/credit reconciliation and unmapped-line detection.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Authenticated users can list their own recent sessions and revoke individual sessions, including the current session; revocation is CSRF-protected and audited.
 - Session-bound CSRF tokens are stored as digests and exposed in a separate readable SameSite=Lax cookie; unsafe authentication requests require a matching `X-CSRF-Token` header and same-host Origin/Referer validation when those headers are present.
