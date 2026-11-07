@@ -7,6 +7,7 @@ from backend.app.finance.api import router as finance_router
 from backend.app.identity.access_api import router as access_router
 from backend.app.identity.api import router as auth_router
 from backend.app.identity.invitation_api import router as invitation_router
+from backend.app.inventory.api import router as inventory_router
 
 
 def create_app() -> FastAPI:
@@ -22,6 +23,7 @@ def create_app() -> FastAPI:
     application.include_router(access_router, prefix="/api/v1")
     application.include_router(invitation_router, prefix="/api/v1")
     application.include_router(finance_router, prefix="/api/v1")
+    application.include_router(inventory_router, prefix="/api/v1")
     return application
 
 
