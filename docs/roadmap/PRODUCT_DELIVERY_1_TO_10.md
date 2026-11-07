@@ -32,7 +32,7 @@ Status: **Foundation implemented; production security work remains**
 - [x] User-owned session listing and individual session revocation, including current-session revocation.
 - [ ] Device metadata/fingerprinting and centralized administrator session controls.
 - [x] Per-tenant invitation create/resend limit (20 actions per rolling hour), serialized on the tenant row.
-- [x] Login throttling by both account+IP and independent IP key to resist password spraying across multiple email addresses; regression tests cover lockout and ensure successful login cannot reset the shared IP counter.
+- [x] Login throttling by account-only, account+IP, and independent IP keys to resist distributed brute force and password spraying; regression tests cover lockout, email normalization, and ensure successful login cannot reset the shared IP counter.
 - [x] Expired login-throttle records are pruned after 30 days, with an indexed `updated_at` field and migration coverage.
 - [ ] API-wide IP/account rate limiting and failed-invitation abuse controls.
 - [x] PostgreSQL concurrency regression test proves simultaneous deactivation cannot remove the last two active owners.
