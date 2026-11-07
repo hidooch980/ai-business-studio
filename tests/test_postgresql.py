@@ -245,14 +245,16 @@ def test_postgresql_concurrent_owner_deactivation_preserves_last_owner() -> None
                 password_hash="unused",
                 display_name="Second owner",
             )
-            role = Role(id=owner_role_id, tenant_id=tenant_id, name="owner", is_system=True)
             db.add(tenant)
             db.flush()
+            persisted_tenant_id = tenant.id
+            assert db.get(Tenant, persisted_tenant_id) is not None
+            role = Role(id=owner_role_id, tenant_id=persisted_tenant_id, name="owner", is_system=True)
             db.add_all([
                 actor, first_owner, second_owner, role,
-                Membership(id=actor_membership_id, tenant_id=tenant_id, user_id=actor_user_id),
-                Membership(id=first_membership_id, tenant_id=tenant_id, user_id=first_user_id),
-                Membership(id=second_membership_id, tenant_id=tenant_id, user_id=second_user_id),
+                Membership(id=actor_membership_id, tenant_id=persisted_tenant_id, user_id=actor_user_id),
+                Membership(id=first_membership_id, tenant_id=persisted_tenant_id, user_id=first_user_id),
+                Membership(id=second_membership_id, tenant_id=persisted_tenant_id, user_id=second_user_id),
             ])
             db.flush()
             db.add_all([
