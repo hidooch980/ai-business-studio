@@ -29,7 +29,7 @@ Schedule the script with a protected systemd timer or equivalent scheduler. Conf
 ## Restore (destructive)
 
 1. Provision a separate, empty recovery database and verify the configured libpq service points to that database.
-2. Verify the encrypted artifact checksum using its `.sha256` file.
+2. Keep the `.sha256` sidecar beside the encrypted artifact; the restore utility verifies it before decryption.
 3. Make the age private identity available through a protected path.
 4. Run the restore only after confirming the target database name and host:
 
@@ -43,7 +43,7 @@ export RESTORE_CONFIRMATION=I_HAVE_VERIFIED_THE_TARGET_DATABASE
 ./scripts/restore-postgres.sh
 ```
 
-The restore script refuses to run without the exact confirmation phrase and invokes `pg_restore --clean --if-exists`; it can replace objects in the target database. Never point it at the live production database for a rehearsal.
+The restore script verifies the SHA-256 sidecar before decrypting, refuses to run without the exact confirmation phrase, restricts the target database name, and invokes `pg_restore --single-transaction --clean --if-exists`. It can replace objects in the target database, but a failed restore is rolled back as one transaction. Never point it at the live production database for a rehearsal.
 
 ## Release gate still required
 
