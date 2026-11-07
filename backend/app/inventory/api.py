@@ -182,11 +182,13 @@ def create_inventory_movement(
         )
     )
     product = db.scalar(
-        select(Product).where(
+        select(Product)
+        .where(
             Product.id == payload.product_id,
             Product.tenant_id == principal.tenant.id,
             Product.is_active.is_(True),
         )
+        .with_for_update()
     )
     if warehouse is None or product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active warehouse or product not found in this tenant")
