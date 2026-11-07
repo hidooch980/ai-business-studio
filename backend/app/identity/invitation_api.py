@@ -102,16 +102,25 @@ def create_invitation(
     )) or 0
     if recent_count >= 20:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Invitation rate limit exceeded")
-    pending = db.scalar(select(TenantInvitation.id).where(
+    pending = db.scalars(select(TenantInvitation).where(
         TenantInvitation.tenant_id == principal.tenant.id,
         func.lower(TenantInvitation.email) == email,
         TenantInvitation.accepted_at.is_(None),
         TenantInvitation.revoked_at.is_(None),
-    ))
-    if pending is not None:
+    ).with_for_update()).all()
+    if any(_active_invitation(item, now) for item in pending):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A pending invitation already exists for this email; resend or revoke it",
+        )
+    for expired in pending:
+        expired.revoked_at = now
+        _audit(
+            db,
+            tenant_id=principal.tenant.id,
+            actor_user_id=principal.user.id,
+            action="invitation.expired",
+            invitation_id=expired.id,
         )
     raw_token, token_hash = issue_session_token()
     invitation = TenantInvitation(
