@@ -4,22 +4,37 @@ A modular, offline-capable retail management platform for single-store and multi
 
 ## Approved product scope
 
-The product is a general-purpose retail system. Grocery, apparel, electronics, home goods, mobile, parts and other retail categories use the same core; industry-specific fields and workflows are optional extensions.
+General-purpose retail for grocery, apparel, electronics, home goods, mobile, parts and other retail categories.
 
-- POS, barcode/QR, sales, returns and split payments
+### Applications
+- Owner/admin web console
+- Branch manager application
+- Role-based employee application (cashier, sales, inventory and operations)
+- Customer application/PWA with membership, rewards, coupons, receipts and support
+
+All applications share one backend and source of truth, with strict role, tenant and branch authorization.
+
+### Business capabilities
+- POS, barcode/QR, sales, returns and cash/card/online/split payments
 - Catalog, variants, pricing and tax configuration
 - Inventory, warehouses, stock ledger and transfers
 - Purchasing, suppliers and goods receiving
 - Retail finance, cash/bank, receivables/payables and reconciliation
-- Customers, staff shifts and basic commissions
+- Staff shifts, tasks, commissions and payroll export
+- Customer CRM and loyalty: points ledger, tiers, rewards, coupons, campaigns and referrals
 - Single-branch and multi-branch management
 - Offline-capable operation and durable synchronization
-- Reporting and explainable, advisory AI
+- Reporting, BI and explainable advisory AI
 
 Manufacturing, industrial maintenance, fleet management, project management and enterprise HR are excluded from the retail core.
 
-See:
+## Product specifications
 - [Approved retail product scope](docs/RETAIL_PRODUCT_SCOPE.md)
+- [Loyalty and manager/employee/customer applications](docs/LOYALTY_AND_APPS_SPEC.md)
+- [AI Decision Engine specification](docs/AI_DECISION_ENGINE_SPEC.md)
+- [AI retail product roadmap](docs/AI_AUTONOMOUS_RETAIL_ROADMAP.md)
+- [Reporting and BI specification](docs/REPORTING_AND_BI_SPEC.md)
+- [Reporting implementation backlog](docs/REPORTING_IMPLEMENTATION_BACKLOG.md)
 - [Acceptance and verification plan](docs/RETAIL_ACCEPTANCE_TEST_PLAN.md)
 
 ## Architecture decisions
@@ -27,34 +42,33 @@ See:
 - **Backend:** Python and FastAPI.
 - **Architecture:** modular monolith with explicit domain boundaries and versioned contracts.
 - **Central database:** PostgreSQL.
-- **Local/offline mode:** SQLite in WAL mode on a single local node, with an application-level synchronization protocol. Never share a SQLite database file over a network filesystem.
-- **API:** versioned REST endpoints under `/api/v1`.
-- **Financial and inventory records:** append-only ledgers; corrections use reversal or adjustment entries.
+- **Local/offline mode:** SQLite in WAL mode on a single local node; never share a SQLite database file over a network filesystem.
+- **API:** versioned REST endpoints under /api/v1.
+- **Ledgers:** append-only finance, inventory and loyalty records; corrections use reversal/adjustment entries.
 - **Multi-tenancy:** tenant- and branch-scoped data access and authorization checks at service boundaries.
 - **Synchronization:** transactional outbox/inbox, idempotency keys, retry handling and explicit conflict resolution.
-- **AI:** provider-independent interfaces; AI suggestions are advisory and sensitive actions require authorized human approval.
+- **AI:** advisory only; sensitive actions require authorized human approval.
 - **Localization:** Persian, English, Arabic and Turkish; RTL for Persian/Arabic.
 
 ## Repository status
 
-The approved product scope and acceptance plan are documented. This repository is still at the specification/bootstrap stage; documentation is not evidence that runtime features are implemented or production-ready. Implementation, automated tests, security verification and release checks must be completed before a stable release can be claimed.
+This repository is at specification/bootstrap stage. Documented scope is not evidence that runtime features are implemented or production-ready. Implementation, automated tests, security verification and release checks are required before a stable release can be claimed.
 
 ## Delivery sequence
 
 1. Application foundation, configuration, health, migrations, CI and security baseline.
 2. Tenant/store/branch/user/access model.
-3. Catalog and product variants/barcodes.
-4. POS, payments, returns and cash shifts.
-5. Inventory ledger and purchasing.
-6. Finance ledger and reconciliation.
-7. Staff, customers and reporting.
-8. Multi-branch synchronization and offline recovery.
-9. AI advisory services.
-10. Localization, hardening, end-to-end tests and release packaging.
+3. Catalog, POS, payments, returns and cash shifts.
+4. Inventory, purchasing and finance ledger.
+5. Customer identity, consent and loyalty engine.
+6. Manager, employee and customer application workflows.
+7. Reporting, multi-branch synchronization and offline recovery.
+8. AI decision engine and advisory modules.
+9. Localization, hardening, end-to-end tests and release packaging.
 
 ## Security
 
-Do not commit credentials, API tokens, private keys, signing keys, customer data, payment-card data, production database files, backups, logs, or environment files. Use GitHub Actions Secrets or an approved secret manager for deployment credentials.
+Do not commit credentials, API tokens, private keys, signing keys, customer data, payment-card data, production database files, backups, logs or environment files. Use GitHub Actions Secrets or an approved secret manager for deployment credentials.
 
 Report suspected vulnerabilities privately to the repository owner. See [SECURITY.md](SECURITY.md).
 
