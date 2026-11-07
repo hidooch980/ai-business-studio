@@ -837,6 +837,30 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
         entry = db.query(JournalEntry).one()
         assert entry.tenant_id == UUID(tenant_id)
 
+    other_registration = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "other-finance-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Other Finance Owner",
+            "tenant_name": "Other Finance Studio",
+            "tenant_slug": "other-finance-studio",
+        },
+        headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
+    )
+    assert other_registration.status_code == 201
+    other_tenant_id = other_registration.json()["memberships"][0]["tenant_id"]
+    cross_tenant_post = auth_client.post(
+        "/api/v1/finance/journals",
+        json=payload,
+        headers={
+            "X-Tenant-ID": other_tenant_id,
+            "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+            "Idempotency-Key": "cross-tenant-account-attempt",
+        },
+    )
+    assert cross_tenant_post.status_code == 422
+
 
 def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestClient) -> None:
     registered = auth_client.post(
