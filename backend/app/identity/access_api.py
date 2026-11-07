@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +24,17 @@ class RoleCreateRequest(BaseModel):
 
 class RolePermissionsRequest(BaseModel):
     permission_codes: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=120)]] = Field(max_length=100)
+
+
+class RoleUpdateRequest(BaseModel):
+    name: RoleName | None = None
+    description: RoleDescription | None = None
+
+    @model_validator(mode="after")
+    def require_at_least_one_field(self) -> "RoleUpdateRequest":
+        if self.name is None and self.description is None:
+            raise ValueError("At least one role field must be supplied")
+        return self
 
 
 class MembershipStatusRequest(BaseModel):
@@ -94,6 +105,56 @@ def create_role(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Role name already exists") from exc
     return {"id": str(role.id), "name": role.name, "description": role.description, "is_system": role.is_system}
 
+
+
+@router.patch("/roles/{role_id}")
+def update_role(
+    role_id: UUID,
+    payload: RoleUpdateRequest,
+    principal: TenantPrincipal = Depends(require_permission("access.roles.manage")),
+    _csrf: None = Depends(require_csrf_protection),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id))
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    if role.is_system:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="System roles cannot be modified")
+    if payload.name is not None:
+        role.name = payload.name
+    if payload.description is not None:
+        role.description = payload.description
+    try:
+        _audit(db, principal, "access.role_updated", "role", str(role.id))
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Role name already exists") from exc
+    return {"id": str(role.id), "name": role.name, "description": role.description, "is_system": role.is_system}
+
+
+@router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_role(
+    role_id: UUID,
+    principal: TenantPrincipal = Depends(require_permission("access.roles.manage")),
+    _csrf: None = Depends(require_csrf_protection),
+    db: Session = Depends(get_db_session),
+) -> None:
+    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id))
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    if role.is_system:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="System roles cannot be deleted")
+    assigned = db.scalar(select(MembershipRole.id).where(
+        MembershipRole.tenant_id == principal.tenant.id,
+        MembershipRole.role_id == role.id,
+    ))
+    if assigned is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Role is assigned to one or more memberships")
+    db.query(RolePermission).filter(RolePermission.role_id == role.id).delete(synchronize_session=False)
+    _audit(db, principal, "access.role_deleted", "role", str(role.id))
+    db.delete(role)
+    db.commit()
 
 @router.put("/roles/{role_id}/permissions")
 def replace_role_permissions(
