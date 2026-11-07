@@ -55,9 +55,22 @@ def register_user(
     membership = Membership(tenant_id=tenant.id, user_id=user.id)
     db.add(membership)
     db.flush()
-    permissions = [Permission(code=code, description=description) for code, description in PERMISSION_CATALOG]
-    db.add_all(permissions)
+    permission_codes = [code for code, _description in PERMISSION_CATALOG]
+    permissions_by_code = {
+        permission.code: permission
+        for permission in db.scalars(select(Permission).where(Permission.code.in_(permission_codes))).all()
+    }
+    missing_permissions = [
+        Permission(code=code, description=description)
+        for code, description in PERMISSION_CATALOG
+        if code not in permissions_by_code
+    ]
+    db.add_all(missing_permissions)
     db.flush()
+    permissions = [
+        permissions_by_code.get(code) or next(item for item in missing_permissions if item.code == code)
+        for code in permission_codes
+    ]
     owner_role = Role(tenant_id=tenant.id, name="owner", description="Tenant owner", is_system=True)
     db.add(owner_role)
     db.flush()
