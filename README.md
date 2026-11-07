@@ -44,7 +44,6 @@ Implemented in the foundation branch:
 
 Not implemented and still required before production use:
 - MFA, account recovery, expanded abuse monitoring, and full session/device management.
-- MFA, account recovery, expanded abuse monitoring, and full session/device management.
 - Production-grade security review, rate limiting for invitation creation beyond its current bounded policy, and concurrency/integration testing against production PostgreSQL.
 - Complete accounting domain: chart of accounts, posting periods, reversal/adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
 
