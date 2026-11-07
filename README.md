@@ -27,11 +27,11 @@ Implemented in the foundation branch:
 - Initial identity schema for tenants, users, memberships, tenant roles, permissions, sessions, and audit events.
 - Argon2 password hashing and opaque session-token digest primitives.
 - Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
-- Database-enforced tenant consistency for membership-role assignments using composite foreign keys.
+- Database-enforced tenant consistency for membership-role assignments and invitation-role references using composite foreign keys.
 - Case-insensitive unique email index enforced by the database.
 - Versioned Alembic migrations `0001_identity` through `0008_inventory_ledger`, covering identity, CSRF digests, persistent login throttling, append-only audit events, tenant invitations, the financial journal, and product catalog.
 - HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
-- Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; email delivery remains manual until a provider is configured.
+- Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; create/resend actions share a 20-per-hour tenant limit; email delivery remains manual until a provider is configured.
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
 - Tenant-scoped product catalog API: create, list/search, update and soft-deactivate products; tenant-unique SKU/barcode constraints; catalog-specific permissions and audit events.
 - Tenant-scoped inventory foundation: warehouse management, append-only receipt/issue/adjustment movements, idempotency keys, non-negative stock protection, database-maintained balance projections, tenant-composite foreign keys and SQLite/PostgreSQL immutability triggers.
@@ -42,7 +42,7 @@ Implemented in the foundation branch:
 - Public self-registration is disabled by default and requires explicit environment configuration.
 - Successful registration/login and denied login audit events; persistent, database-backed login throttling keyed by an HMAC of normalized email and client IP (default 8 failures per 5 minutes, 15-minute lock); production requires a unique `AUTH_RATE_LIMIT_SECRET` of at least 32 characters.
 - Database-enforced append-only audit events using SQLite and PostgreSQL triggers; migration tests verify that updates and deletes are rejected, and PostgreSQL additionally rejects table truncation. Production database roles must not own the schema or have DDL privileges.
-- SQLite identity tests and PostgreSQL integration smoke test.
+- SQLite identity/migration tests and PostgreSQL 16 integration tests, including concurrent last-active-owner deactivation protection.
 - CI matrix for Python 3.11/3.12 with PostgreSQL 16, strict pytest warnings, Ruff, dependency vulnerability audit, Compose validation, and a production Docker image build.
 - Container deployment foundation: non-root application image, read-only runtime filesystem, local-only port binding, PostgreSQL storage, and separate application/migration database roles. See [container deployment](docs/deployment/CONTAINER.md).
 - Production configuration rejects SQLite/missing DATABASE_URL and insecure session cookies; SQLite foreign-key enforcement is enabled per connection.
@@ -50,7 +50,9 @@ Implemented in the foundation branch:
 
 Not implemented and still required before production use:
 - MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
-- Production-grade security review, rate limiting for invitation creation beyond its current bounded policy, and concurrency/integration testing against production PostgreSQL.
+- MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
+- API-wide IP/account rate limits; invitation create/resend currently has a per-tenant 20-per-hour limit.
+- Independent production security review and additional PostgreSQL concurrency stress tests for role and invitation operations.
 - Complete accounting domain: chart of accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
 
 - Product categories/unit conversion, batch/expiry tracking, stock valuation, POS, procurement, sales, CRM, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
