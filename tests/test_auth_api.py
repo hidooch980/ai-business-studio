@@ -742,6 +742,24 @@ def test_expired_invitation_can_be_replaced_and_old_token_is_invalidated(auth_cl
         assert old.token_hash != hash_session_token(second.json()["invitation_token"])
 
 
+def _create_financial_account(
+    client: TestClient,
+    tenant_id: str,
+    code: str,
+    account_type: str,
+) -> dict:
+    response = client.post(
+        "/api/v1/finance/accounts",
+        json={"code": code, "name": code.replace("-", " ").title(), "account_type": account_type},
+        headers={
+            "X-Tenant-ID": tenant_id,
+            "X-CSRF-Token": client.cookies.get("abs_csrf"),
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
 def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client: TestClient) -> None:
     registered = auth_client.post(
         "/api/v1/auth/register",
@@ -755,6 +773,8 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     )
     assert registered.status_code == 201
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    _create_financial_account(auth_client, tenant_id, "cash", "asset")
+    _create_financial_account(auth_client, tenant_id, "accounts-receivable", "asset")
     headers = {
         "X-Tenant-ID": tenant_id,
         "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
@@ -773,6 +793,7 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     assert created.json()["created"] is True
     assert created.json()["currency"] == "USD"
     assert len(created.json()["lines"]) == 2
+    assert all(line["financial_account_id"] for line in created.json()["lines"])
     replay = auth_client.post("/api/v1/finance/journals", json=payload, headers=headers)
     assert replay.status_code == 201
     assert replay.json()["created"] is False
@@ -795,6 +816,18 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
         headers={**headers, "Idempotency-Key": "invoice-unbalanced"},
     )
     assert unbalanced.status_code == 422
+    unknown_account = auth_client.post(
+        "/api/v1/finance/journals",
+        json={
+            **payload,
+            "lines": [
+                {"account_code": "cash", "debit_minor": 100, "credit_minor": 0},
+                {"account_code": "not-configured", "debit_minor": 0, "credit_minor": 100},
+            ],
+        },
+        headers={**headers, "Idempotency-Key": "unknown-account"},
+    )
+    assert unknown_account.status_code == 422
     listed = auth_client.get("/api/v1/finance/journals", headers={"X-Tenant-ID": tenant_id})
     assert listed.status_code == 200
     assert len(listed.json()["items"]) == 1
@@ -817,6 +850,8 @@ def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestCl
         },
     )
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    _create_financial_account(auth_client, tenant_id, "cash", "asset")
+    _create_financial_account(auth_client, tenant_id, "sales", "income")
     headers = {
         "X-Tenant-ID": tenant_id,
         "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
