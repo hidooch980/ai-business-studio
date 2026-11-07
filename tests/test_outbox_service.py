@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 from uuid import UUID, uuid4
 
 from sqlalchemy import create_engine
