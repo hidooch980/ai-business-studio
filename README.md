@@ -35,7 +35,7 @@ Implemented in the foundation branch:
 - Session-bound CSRF tokens are stored as digests and exposed in a separate readable SameSite=Lax cookie; unsafe authentication requests require a matching `X-CSRF-Token` header and same-host Origin/Referer validation when those headers are present.
 - Public self-registration is disabled by default and requires explicit environment configuration.
 - Successful registration/login and denied login audit events; persistent, database-backed login throttling keyed by an HMAC of normalized email and client IP (default 8 failures per 5 minutes, 15-minute lock); production requires a unique `AUTH_RATE_LIMIT_SECRET` of at least 32 characters.
-- Database-enforced append-only audit events using SQLite and PostgreSQL triggers; migration and integration tests verify that updates and deletes are rejected.
+- Database-enforced append-only audit events using SQLite and PostgreSQL triggers; migration tests verify that updates and deletes are rejected, and PostgreSQL additionally rejects table truncation. Production database roles must not own the schema or have DDL privileges.
 - SQLite identity tests and PostgreSQL integration smoke test.
 - CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service and strict pytest warnings.
 
