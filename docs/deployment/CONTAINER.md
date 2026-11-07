@@ -10,7 +10,7 @@
 ## First deployment
 
 1. Copy `.env.example` to `.env`.
-2. Replace `POSTGRES_PASSWORD` and `AUTH_RATE_LIMIT_SECRET` with independent random secrets. Use at least 32 random characters for `AUTH_RATE_LIMIT_SECRET`.
+2. Replace `POSTGRES_PASSWORD`, `APP_DB_PASSWORD`, `MIGRATOR_DB_PASSWORD`, and `AUTH_RATE_LIMIT_SECRET` with independent random secrets. Use at least 32 random characters for `AUTH_RATE_LIMIT_SECRET`. Use at least 32 random characters for `AUTH_RATE_LIMIT_SECRET`.
 3. Set `DATABASE_URL` to the `abs_app` role and `MIGRATION_DATABASE_URL` to the `abs_migrator` role. Both must use `postgresql+psycopg://` and match the database name and passwords. URL-encode reserved characters in passwords.
 4. Build and apply the reviewed schema migration:
 
