@@ -100,7 +100,7 @@ def reverse_journal(
             journal_entry_id=journal_entry_id,
             idempotency_key=idempotency_key,
         )
-    except JournalConflictError as exc:
+    except (JournalConflictError, AccountingPeriodConflictError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         code = status.HTTP_404_NOT_FOUND if str(exc) == "Journal entry not found" else status.HTTP_422_UNPROCESSABLE_CONTENT
