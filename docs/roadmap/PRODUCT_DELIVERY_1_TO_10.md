@@ -126,7 +126,7 @@ Status: **Container foundation implemented; operational controls remain**
 
 - [x] Reproducible Dockerfile with non-root runtime and read-only app filesystem.
 - [x] PostgreSQL Compose service with separate non-superuser app and migration roles.
-- [x] CI validation of Compose configuration and container image build (pending latest run).
+- [x] CI validation of Compose configuration and container image build (verified on a green run; re-run for each later commit).
 - [ ] Separate dev/staging/production deployment environments.
 - [ ] TLS, secret manager, least-privilege database roles.
 - [ ] Structured logs, metrics, traces, health/readiness checks, and alerting.
