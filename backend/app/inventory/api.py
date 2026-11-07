@@ -226,8 +226,7 @@ def create_inventory_movement(
     if balance.quantity_on_hand + delta < 0:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Insufficient stock for this movement")
-    balance.quantity_on_hand += delta
-    balance.updated_at = datetime.now(UTC)
+    # The database AFTER INSERT trigger applies the immutable movement to this balance.
     movement = InventoryMovement(
         tenant_id=principal.tenant.id,
         warehouse_id=warehouse.id,
