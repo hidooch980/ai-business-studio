@@ -41,6 +41,9 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
         with pytest.raises(DBAPIError, match="append-only"):
             with engine.begin() as connection:
                 connection.execute(text("DELETE FROM audit_events"))
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as connection:
+                connection.execute(text("TRUNCATE TABLE audit_events"))
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM audit_events")).scalar_one() == 1
     finally:
