@@ -17,6 +17,8 @@ mode="$(stat -c '%a' "$PGPASSFILE")"
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
+exec 9>"$BACKUP_DIR/.backup.lock"
+flock -n 9 || { echo "Another backup is already running" >&2; exit 1; }
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 base="${PGDATABASE}-${timestamp}.dump"
 plain_tmp="$(mktemp)"
@@ -27,6 +29,7 @@ trap cleanup EXIT
 pg_dump --format=custom --compress=9 --no-owner --no-acl --file="$plain_tmp"
 age --recipient "$BACKUP_AGE_RECIPIENT" --output "$encrypted_tmp" "$plain_tmp"
 destination="${BACKUP_DIR}/${base}.age"
+[[ ! -e "$destination" ]] || { echo "Backup destination already exists" >&2; exit 1; }
 mv "$encrypted_tmp" "$destination"
 chmod 600 "$destination"
 sha256sum "$destination" > "${destination}.sha256"
