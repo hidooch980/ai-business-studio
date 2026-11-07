@@ -64,17 +64,8 @@ jobs:
       - name: Check shell and systemd configuration syntax
         run: |
           bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
-          grep -q '^Type=oneshot
-      - name: Build production container
-        run: docker build --tag ai-business-studio:ci .
- deploy/systemd/ai-business-studio-backup.service
-          grep -q '^NoNewPrivileges=true
-      - name: Build production container
-        run: docker build --tag ai-business-studio:ci .
- deploy/systemd/ai-business-studio-backup.service
-          grep -q '^Persistent=true
-      - name: Build production container
-        run: docker build --tag ai-business-studio:ci .
- deploy/systemd/ai-business-studio-backup.timer
+          grep -Fq "Type=oneshot" deploy/systemd/ai-business-studio-backup.service
+          grep -Fq "NoNewPrivileges=true" deploy/systemd/ai-business-studio-backup.service
+          grep -Fq "Persistent=true" deploy/systemd/ai-business-studio-backup.timer
       - name: Build production container
         run: docker build --tag ai-business-studio:ci .
