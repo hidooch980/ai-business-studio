@@ -202,6 +202,9 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
     registered = auth_client.post("/api/v1/auth/register", json=payload)
     assert registered.status_code == 201
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    session_token = registered.cookies.get("abs_session")
+    assert session_token
+    auth_headers = {"Cookie": f"abs_session={session_token}"}
 
     router = APIRouter()
 
@@ -215,7 +218,7 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
 
     denied = auth_client.get(
         "/api/v1/test/rbac-probe",
-        headers={"X-Tenant-ID": tenant_id},
+        headers={**auth_headers, "X-Tenant-ID": tenant_id},
     )
     assert denied.status_code == 403
 
@@ -235,7 +238,7 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
 
     foreign_tenant = auth_client.get(
         "/api/v1/test/rbac-probe",
-        headers={"X-Tenant-ID": foreign_tenant_id},
+        headers={**auth_headers, "X-Tenant-ID": foreign_tenant_id},
     )
     assert foreign_tenant.status_code == 403
 
@@ -255,7 +258,7 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
 
     allowed = auth_client.get(
         "/api/v1/test/rbac-probe",
-        headers={"X-Tenant-ID": tenant_id},
+        headers={**auth_headers, "X-Tenant-ID": tenant_id},
     )
     assert allowed.status_code == 200
     assert allowed.json()["tenant_id"] == tenant_id
