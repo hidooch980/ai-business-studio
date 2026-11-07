@@ -10,7 +10,17 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from backend.app.identity.models import LoginRateLimit, Membership, MembershipRole, Permission, Role, RolePermission, Tenant, User, UserSession
+from backend.app.identity.models import (
+    LoginRateLimit,
+    Membership,
+    MembershipRole,
+    Permission,
+    Role,
+    RolePermission,
+    Tenant,
+    User,
+    UserSession,
+)
 from backend.app.identity.permissions import PERMISSION_CATALOG
 from backend.app.identity.security import (
     hash_password,
