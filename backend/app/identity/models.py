@@ -223,6 +223,42 @@ class JournalLine(Base):
     credit_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class FinancialAccount(Base):
+    __tablename__ = "financial_accounts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_financial_account_tenant_code"),
+        UniqueConstraint("tenant_id", "id", name="uq_financial_account_tenant_id_id"),
+        ForeignKeyConstraint(
+            ["tenant_id", "parent_account_id"],
+            ["financial_accounts.tenant_id", "financial_accounts.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "account_type IN ('asset', 'liability', 'equity', 'income', 'expense')",
+            name="ck_financial_account_type",
+        ),
+        CheckConstraint("length(trim(code)) > 0", name="ck_financial_account_code_nonempty"),
+        CheckConstraint("length(trim(name)) > 0", name="ck_financial_account_name_nonempty"),
+        CheckConstraint(
+            "parent_account_id IS NULL OR parent_account_id <> id",
+            name="ck_financial_account_not_own_parent",
+        ),
+        Index("ix_financial_accounts_tenant_type_code", "tenant_id", "account_type", "code"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
+    code: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(255))
+    parent_account_id: Mapped[UUID | None] = mapped_column(Uuid)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
 class TenantInvitation(Base):
     __tablename__ = "tenant_invitations"
     __table_args__ = (
