@@ -6,10 +6,12 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from uuid import UUID
 
 from backend.app.core.config import get_settings
 from backend.app.db.session import build_engine, get_db_session
 from backend.app.main import create_app
+from backend.app.outbox.models import OutboxEvent
 
 
 @pytest.fixture
@@ -30,6 +32,7 @@ def inventory_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[Tes
     assert migration.returncode == 0, f"{migration.stdout}\n{migration.stderr}"
     engine = build_engine(database_url)
     application = create_app()
+    application.state.test_engine = engine
 
     def override_db() -> Generator[Session, None, None]:
         with Session(engine, expire_on_commit=False) as db:
@@ -149,6 +152,10 @@ def test_inventory_receipt_issue_idempotency_and_nonnegative_stock(inventory_cli
     movements = inventory_client.get("/api/v1/inventory/movements", headers=headers)
     assert movements.status_code == 200
     assert len(movements.json()["items"]) == 2
+    with Session(inventory_client.app.state.test_engine) as db:
+        outbox_events = db.query(OutboxEvent).filter_by(tenant_id=UUID(tenant_id)).all()
+        assert len(outbox_events) == 2
+        assert {item.event_type for item in outbox_events} == {"inventory.movement.created"}
 
 
 def test_inventory_rejects_cross_tenant_warehouse_and_product(inventory_client: TestClient) -> None:
