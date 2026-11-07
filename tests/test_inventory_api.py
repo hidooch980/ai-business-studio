@@ -167,6 +167,7 @@ def test_inventory_rejects_cross_tenant_warehouse_and_product(inventory_client: 
     assert warehouse.status_code == 201
     assert product.status_code == 201
 
+    inventory_client.cookies.clear()
     second_tenant, second_csrf = _register(inventory_client, "second-owner@example.test", "second-stock")
     second_headers = _headers(inventory_client, second_tenant, second_csrf)
     denied = inventory_client.post(
