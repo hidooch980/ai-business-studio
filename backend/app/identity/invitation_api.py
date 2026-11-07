@@ -109,7 +109,7 @@ def create_invitation(
     try:
         email = normalize_email(payload.email)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid email address is required") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="A valid email address is required") from exc
     if db.scalar(select(User.id).where(func.lower(User.email) == email)) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
     role = db.scalar(select(Role).where(Role.id == payload.role_id, Role.tenant_id == principal.tenant.id))
