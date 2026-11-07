@@ -1073,3 +1073,120 @@ def test_invitation_rate_limit_includes_resends(auth_client: TestClient) -> None
 
     blocked = auth_client.post(f"/api/v1/invitations/{invitation_id}/resend", headers=headers)
     assert blocked.status_code == 429
+
+
+def test_chart_of_accounts_hierarchy_permissions_and_tenant_isolation(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "chart-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Chart Owner",
+            "tenant_name": "Chart Studio",
+            "tenant_slug": "chart-studio",
+        },
+    )
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+    }
+
+    parent = auth_client.post(
+        "/api/v1/finance/accounts",
+        json={"code": "1000", "name": "Assets", "account_type": "asset"},
+        headers=headers,
+    )
+    assert parent.status_code == 201, parent.text
+    parent_id = parent.json()["id"]
+    assert parent.json()["normal_balance"] == "debit"
+
+    child = auth_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "code": "1010",
+            "name": "Cash",
+            "account_type": "asset",
+            "parent_account_id": parent_id,
+        },
+        headers=headers,
+    )
+    assert child.status_code == 201, child.text
+    assert child.json()["parent_account_id"] == parent_id
+
+    wrong_type = auth_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "code": "4000",
+            "name": "Income below asset",
+            "account_type": "income",
+            "parent_account_id": parent_id,
+        },
+        headers=headers,
+    )
+    assert wrong_type.status_code == 422
+
+    duplicate = auth_client.post(
+        "/api/v1/finance/accounts",
+        json={"code": "1000", "name": "Duplicate", "account_type": "asset"},
+        headers=headers,
+    )
+    assert duplicate.status_code == 409
+
+    blocked_parent = auth_client.patch(
+        f"/api/v1/finance/accounts/{parent_id}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert blocked_parent.status_code == 409
+
+    deactivated_child = auth_client.patch(
+        f"/api/v1/finance/accounts/{child.json()['id']}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert deactivated_child.status_code == 200
+    deactivated_parent = auth_client.patch(
+        f"/api/v1/finance/accounts/{parent_id}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert deactivated_parent.status_code == 200
+
+    accounts = auth_client.get(
+        "/api/v1/finance/accounts",
+        params={"account_type": "asset"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert accounts.status_code == 200
+    assert accounts.json()["items"] == []
+
+    second_registration = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "other-chart-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Other Chart Owner",
+            "tenant_name": "Other Chart Studio",
+            "tenant_slug": "other-chart-studio",
+        },
+        headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
+    )
+    assert second_registration.status_code == 201
+    other_tenant_id = second_registration.json()["memberships"][0]["tenant_id"]
+    other_headers = {
+        "X-Tenant-ID": other_tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+    }
+    foreign_parent = auth_client.post(
+        "/api/v1/finance/accounts",
+        json={
+            "code": "1010",
+            "name": "Foreign parent reference",
+            "account_type": "asset",
+            "parent_account_id": parent_id,
+        },
+        headers=other_headers,
+    )
+    assert foreign_parent.status_code == 404
