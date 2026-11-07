@@ -33,6 +33,7 @@ Implemented in the foundation branch:
 - HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
 - Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; email delivery remains manual until a provider is configured.
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
+- Tenant-scoped product catalog API: create, list/search, update and soft-deactivate products; tenant-unique SKU/barcode constraints; catalog-specific permissions and audit events.
 - Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, and SQLite/PostgreSQL mutation and overposting guards.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Authenticated users can list their own recent sessions and revoke individual sessions, including the current session; revocation is CSRF-protected and audited.
