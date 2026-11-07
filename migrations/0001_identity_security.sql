@@ -31,7 +31,7 @@ CREATE TABLE identities (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     CHECK (phone_e164 IS NOT NULL OR email IS NOT NULL),
-    CHECK (phone_e164 IS NULL OR phone_e164 ~ '^\\+[1-9][0-9]{7,14}$')
+    CHECK (phone_e164 IS NULL OR (left(phone_e164, 1) = '+' AND length(phone_e164) BETWEEN 9 AND 16 AND substring(phone_e164 FROM 2) !~ '[^0-9]'))
 );
 CREATE UNIQUE INDEX identities_phone_e164_uq ON identities(phone_e164) WHERE phone_e164 IS NOT NULL;
 CREATE UNIQUE INDEX identities_email_lower_uq ON identities(lower(email)) WHERE email IS NOT NULL;
