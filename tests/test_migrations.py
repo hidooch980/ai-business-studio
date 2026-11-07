@@ -72,17 +72,25 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         entry_id = uuid4().hex
         with engine.begin() as connection:
             connection.execute(
-                text("INSERT INTO tenants (id, name, slug, is_active, created_at) VALUES (:id, 'Ledger test', 'ledger-test', 1, '2026-01-01 00:00:00')"),
+                text(
+                    "INSERT INTO tenants (id, name, slug, is_active, created_at) "
+                    "VALUES (:id, 'Ledger test', 'ledger-test', 1, '2026-01-01 00:00:00')"
+                ),
                 {"id": tenant_id},
             )
             connection.execute(
-                text("INSERT INTO users (id, email, password_hash, display_name, is_active, is_platform_admin, created_at) VALUES (:id, 'ledger@example.test', 'hash', 'Ledger', 1, 0, '2026-01-01 00:00:00')"),
+                text(
+                    "INSERT INTO users (id, email, password_hash, display_name, is_active, is_platform_admin, created_at) "
+                    "VALUES (:id, 'ledger@example.test', 'hash', 'Ledger', 1, 0, '2026-01-01 00:00:00')"
+                ),
                 {"id": user_id},
             )
             connection.execute(
                 text(
-                    "INSERT INTO journal_entries (id, tenant_id, idempotency_key, request_hash, currency, description, debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
-                    "VALUES (:id, :tenant, 'migration-ledger', :hash, 'USD', 'Migration test', 100, 100, :user, '2026-01-01 00:00:00')"
+                    "INSERT INTO journal_entries (id, tenant_id, idempotency_key, request_hash, currency, description, "
+                    "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
+                    "VALUES (:id, :tenant, 'migration-ledger', :hash, 'USD', 'Migration test', 100, 100, :user, "
+                    "'2026-01-01 00:00:00')"
                 ),
                 {"id": entry_id, "tenant": tenant_id, "hash": "0" * 64, "user": user_id},
             )
