@@ -31,7 +31,9 @@ function Login({ onBack, onPreview }: { onBack: () => void; onPreview: () => voi
   return <main className="login-page"><button className="back-link" onClick={onBack}>→ بازگشت به صفحه اصلی</button><section className="login-card"><Brand /><div className="eyebrow">ورود امن به حساب کاربری</div><h1>خوش آمدید</h1><p>برای دریافت کد یک‌بارمصرف، شماره موبایل خود را وارد کنید.</p><form onSubmit={submit}><label htmlFor="phone">شماره موبایل</label><input id="phone" inputMode="tel" autoComplete="tel" placeholder="مثلاً ۰۹۱۲۱۲۳۴۵۶۷" value={phone} onChange={e=>setPhone(e.target.value)} required minLength={8} /><button className="button button-primary button-large full" type="submit">درخواست کد ورود</button></form>{notice && <div className="notice" role="status">{notice}</div>}<button type="button" className="text-link demo-preview" onClick={onPreview}>مشاهده پیش‌نمایش داشبورد ←</button><small className="login-foot">کد ورود فقط از طریق سرویس تأییدشده ارسال می‌شود. هیچ کد آزمایشی یا ثابت برای ورود وجود ندارد.</small></section></main>;
 }
 
-function Dashboard({ onHome }: { onHome: () => void }) {\n  return <RoleWorkspace onHome={onHome} />;\n}
+function Dashboard({ onHome }: { onHome: () => void }) {
+  return <RoleWorkspace onHome={onHome} />;
+}
 
 export default function App() {
   const [screen,setScreen]=useState<Screen>("home");
