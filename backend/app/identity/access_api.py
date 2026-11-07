@@ -3,13 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
-from backend.app.identity.models import AuditEvent, Membership, MembershipRole, Permission, Role, RolePermission
+from backend.app.identity.models import AuditEvent, Membership, MembershipRole, Permission, Role, RolePermission, User
 
 router = APIRouter(prefix="/access", tags=["access-control"])
 
@@ -24,6 +24,10 @@ class RoleCreateRequest(BaseModel):
 
 class RolePermissionsRequest(BaseModel):
     permission_codes: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=120)]] = Field(max_length=100)
+
+
+class MembershipStatusRequest(BaseModel):
+    is_active: bool
 
 
 def _audit(db: Session, principal: TenantPrincipal, action: str, resource_type: str, resource_id: str) -> None:
@@ -140,4 +144,152 @@ def assign_membership_role(
     if exists is None:
         db.add(MembershipRole(tenant_id=principal.tenant.id, membership_id=membership.id, role_id=role.id))
     _audit(db, principal, "access.membership_role_assigned", "membership", str(membership.id))
+    db.commit()
+
+
+
+def _active_owner_count(db: Session, tenant_id: UUID, excluding_membership_id: UUID | None = None) -> int:
+    statement = (
+        select(func.count(MembershipRole.id))
+        .join(Membership, Membership.id == MembershipRole.membership_id)
+        .join(Role, Role.id == MembershipRole.role_id)
+        .where(
+            MembershipRole.tenant_id == tenant_id,
+            Membership.tenant_id == tenant_id,
+            Membership.is_active.is_(True),
+            Role.tenant_id == tenant_id,
+            Role.is_system.is_(True),
+            Role.name == "owner",
+        )
+    )
+    if excluding_membership_id is not None:
+        statement = statement.where(Membership.id != excluding_membership_id)
+    return db.scalar(statement) or 0
+
+
+@router.get("/memberships")
+def list_memberships(
+    principal: TenantPrincipal = Depends(require_permission("users.read")),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    rows = db.execute(
+        select(Membership, User)
+        .join(User, User.id == Membership.user_id)
+        .where(Membership.tenant_id == principal.tenant.id)
+        .order_by(User.display_name, User.email, Membership.id)
+    ).all()
+    items = []
+    for membership, user in rows:
+        roles = db.execute(
+            select(Role.id, Role.name, Role.is_system)
+            .join(MembershipRole, MembershipRole.role_id == Role.id)
+            .where(
+                MembershipRole.tenant_id == principal.tenant.id,
+                MembershipRole.membership_id == membership.id,
+                Role.tenant_id == principal.tenant.id,
+            )
+            .order_by(Role.name, Role.id)
+        ).all()
+        items.append({
+            "id": str(membership.id),
+            "user_id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "user_is_active": user.is_active,
+            "is_active": membership.is_active,
+            "roles": [
+                {"id": str(role_id), "name": name, "is_system": is_system}
+                for role_id, name, is_system in roles
+            ],
+            "created_at": membership.created_at.isoformat(),
+        })
+    return {"items": items}
+
+
+@router.patch("/memberships/{membership_id}")
+def set_membership_status(
+    membership_id: UUID,
+    payload: MembershipStatusRequest,
+    principal: TenantPrincipal = Depends(require_permission("users.manage")),
+    _csrf: None = Depends(require_csrf_protection),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    membership = db.scalar(
+        select(Membership).where(
+            Membership.id == membership_id,
+            Membership.tenant_id == principal.tenant.id,
+        )
+    )
+    if membership is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+    if not payload.is_active and membership.user_id == principal.user.id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot deactivate your own membership")
+    if not payload.is_active and membership.is_active:
+        owner_role = db.scalar(
+            select(Role).where(
+                Role.tenant_id == principal.tenant.id,
+                Role.name == "owner",
+                Role.is_system.is_(True),
+            )
+        )
+        if owner_role is not None:
+            assigned_owner = db.scalar(
+                select(MembershipRole.id).where(
+                    MembershipRole.tenant_id == principal.tenant.id,
+                    MembershipRole.membership_id == membership.id,
+                    MembershipRole.role_id == owner_role.id,
+                )
+            )
+            if assigned_owner is not None and _active_owner_count(
+                db, principal.tenant.id, excluding_membership_id=membership.id
+            ) == 0:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The last active owner cannot be deactivated")
+    membership.is_active = payload.is_active
+    _audit(
+        db,
+        principal,
+        "access.membership_activated" if payload.is_active else "access.membership_deactivated",
+        "membership",
+        str(membership.id),
+    )
+    db.commit()
+    return {"id": str(membership.id), "is_active": membership.is_active}
+
+
+@router.delete("/memberships/{membership_id}/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_membership_role(
+    membership_id: UUID,
+    role_id: UUID,
+    principal: TenantPrincipal = Depends(require_permission("access.memberships.manage")),
+    _csrf: None = Depends(require_csrf_protection),
+    db: Session = Depends(get_db_session),
+) -> None:
+    membership = db.scalar(
+        select(Membership).where(
+            Membership.id == membership_id,
+            Membership.tenant_id == principal.tenant.id,
+        )
+    )
+    role = db.scalar(
+        select(Role).where(
+            Role.id == role_id,
+            Role.tenant_id == principal.tenant.id,
+        )
+    )
+    if membership is None or role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership or role not found")
+    assignment = db.scalar(
+        select(MembershipRole).where(
+            MembershipRole.tenant_id == principal.tenant.id,
+            MembershipRole.membership_id == membership.id,
+            MembershipRole.role_id == role.id,
+        )
+    )
+    if assignment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role assignment not found")
+    if role.is_system and role.name == "owner" and membership.is_active:
+        if _active_owner_count(db, principal.tenant.id, excluding_membership_id=membership.id) == 0:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The last active owner role cannot be removed")
+    db.delete(assignment)
+    _audit(db, principal, "access.membership_role_removed", "membership", str(membership.id))
     db.commit()
