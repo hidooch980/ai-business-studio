@@ -35,6 +35,7 @@
 - Public registration remains disabled.
 - The API image runs as an unprivileged UID and has a read-only root filesystem.
 - PostgreSQL data is stored in a named Docker volume.
-- This Compose file does not configure TLS termination, automated encrypted backups, backup retention, restore rehearsal, metrics, alerting, or high availability. Those remain release blockers.
+- Encrypted PostgreSQL backup and guarded restore scripts are provided in [backup/restore operations](BACKUP_RESTORE.md); scheduled execution, off-host storage, alerting, and a verified restore rehearsal remain release blockers.
+- This Compose file does not configure TLS termination, metrics, alerting, or high availability. Those remain release blockers.
 - Do not use real customer data until backup/restore, access-control review, and production security gates are complete.
 - For upgrades, take and verify a database backup before running the migration profile.
