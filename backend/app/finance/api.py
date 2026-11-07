@@ -19,7 +19,7 @@ from backend.app.identity.models import JournalEntry
 
 router = APIRouter(prefix="/finance/journals", tags=["finance-ledger"])
 
-AccountCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+AccountCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 
 
 class JournalLineInput(BaseModel):
