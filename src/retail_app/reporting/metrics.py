@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Iterable
+from collections.abc import Iterable
 
 
 @dataclass(frozen=True)
