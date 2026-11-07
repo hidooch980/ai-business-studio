@@ -170,3 +170,15 @@ def test_login_rate_limit_pruning_removes_expired_hashed_identifiers() -> None:
             assert db.query(LoginRateLimit).one().identifier_hash == "b" * 64
     finally:
         engine.dispose()
+
+
+def test_account_login_throttle_key_is_stable_across_email_case() -> None:
+    from backend.app.identity.service import login_account_identifier_hash
+
+    secret = "test-secret-for-account-throttle"
+    first = login_account_identifier_hash("Owner@Example.test", secret)
+    second = login_account_identifier_hash(" owner@example.test ", secret)
+    different = login_account_identifier_hash("other@example.test", secret)
+    assert first == second
+    assert first != different
+    assert len(first) == 64
