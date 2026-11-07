@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -686,3 +687,40 @@ def test_membership_manager_cannot_assign_system_owner_role(auth_client: TestCli
         },
     )
     assert response.status_code == 403
+
+
+def test_expired_invitation_can_be_replaced_and_old_token_is_invalidated(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "expiry-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Expiry Owner",
+            "tenant_name": "Expiry Studio",
+            "tenant_slug": "expiry-studio",
+        },
+    )
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+    }
+    role = auth_client.post("/api/v1/access/roles", json={"name": "expiry-member"}, headers=headers)
+    assert role.status_code == 201
+    payload = {"email": "expiry-member@example.test", "display_name": "Expiry Member", "role_id": role.json()["id"]}
+    first = auth_client.post("/api/v1/invitations", json=payload, headers=headers)
+    assert first.status_code == 201
+
+    with Session(auth_client.app.state.test_engine) as db:
+        invitation = db.query(TenantInvitation).filter_by(email="expiry-member@example.test").one()
+        invitation.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        db.commit()
+        invitation_id = invitation.id
+
+    second = auth_client.post("/api/v1/invitations", json=payload, headers=headers)
+    assert second.status_code == 201
+    with Session(auth_client.app.state.test_engine) as db:
+        old = db.get(TenantInvitation, invitation_id)
+        assert old is not None and old.revoked_at is not None
+        assert old.token_hash != hash_session_token(second.json()["invitation_token"])
