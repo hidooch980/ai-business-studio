@@ -29,7 +29,7 @@ Implemented in the foundation branch:
 - Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
 - Database-enforced tenant consistency for membership-role assignments using composite foreign keys.
 - Case-insensitive unique email index enforced by the database.
-- Versioned Alembic migrations for identity (`0001_identity`), session CSRF digests (`0002_session_csrf`), and persistent login throttling (`0003_login_rate_limits`).
+- Versioned Alembic migrations `0001_identity` through `0007_product_catalog`, covering identity, CSRF digests, persistent login throttling, append-only audit events, tenant invitations, the financial journal, and product catalog.
 - HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
 - Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; email delivery remains manual until a provider is configured.
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
