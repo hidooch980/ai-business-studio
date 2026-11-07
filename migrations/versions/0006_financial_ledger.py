@@ -21,6 +21,7 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
         sa.Column("idempotency_key", sa.String(length=128), nullable=False),
         sa.Column("request_hash", sa.String(length=64), nullable=False),
+        sa.Column("reversal_of_id", sa.Uuid(), nullable=True),
         sa.Column("currency", sa.String(length=3), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=False),
         sa.Column("debit_total_minor", sa.Integer(), nullable=False),
@@ -36,6 +37,12 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "id", name="uq_journal_entries_tenant_id_id"),
         sa.UniqueConstraint("tenant_id", "idempotency_key", name="uq_journal_entries_tenant_idempotency"),
+        sa.UniqueConstraint("tenant_id", "reversal_of_id", name="uq_journal_reversal_tenant_original"),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "reversal_of_id"],
+            ["journal_entries.tenant_id", "journal_entries.id"],
+            ondelete="RESTRICT",
+        ),
     )
     op.create_index("ix_journal_entries_tenant_created", "journal_entries", ["tenant_id", "created_at"])
     op.create_table(
