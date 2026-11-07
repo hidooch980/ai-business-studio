@@ -22,7 +22,7 @@ class Tenant(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
-    memberships: Mapped[list["Membership"]] = relationship(back_populates="tenant")
+    memberships: Mapped[list[Membership]] = relationship(back_populates="tenant")
 
 
 class User(Base):
@@ -51,7 +51,7 @@ class Membership(Base):
 
     tenant: Mapped[Tenant] = relationship(back_populates="memberships")
     user: Mapped[User] = relationship(back_populates="memberships")
-    roles: Mapped[list["MembershipRole"]] = relationship(back_populates="membership")
+    roles: Mapped[list[MembershipRole]] = relationship(back_populates="membership")
 
 
 class Role(Base):
