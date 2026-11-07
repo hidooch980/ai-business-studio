@@ -2,10 +2,6 @@ import { useState, type FormEvent } from "react";
 import RoleWorkspace from "./RoleWorkspace";
 
 type Screen = "home" | "login" | "dashboard";
-type NavItem = "نمای کلی" | "فروش" | "موجودی" | "مشتریان" | "گزارش‌ها";
-
-const navItems: NavItem[] = ["نمای کلی", "فروش", "موجودی", "مشتریان", "گزارش‌ها"];
-
 function Brand() {
   return <div className="brand"><span className="brand-mark">✦</span><span>AI Business <b>Studio</b></span></div>;
 }
