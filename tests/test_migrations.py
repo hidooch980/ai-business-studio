@@ -74,14 +74,17 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             connection.execute(
                 text(
                     "INSERT INTO tenants (id, name, slug, is_active, created_at) "
-                    "VALUES (:id, 'Ledger test', 'ledger-test', 1, '2026-01-01 00:00:00')"
+                    "VALUES (:id, 'Ledger test', 'ledger-test', 1, "
+                    "'2026-01-01 00:00:00')"
                 ),
                 {"id": tenant_id},
             )
             connection.execute(
                 text(
-                    "INSERT INTO users (id, email, password_hash, display_name, is_active, is_platform_admin, created_at) "
-                    "VALUES (:id, 'ledger@example.test', 'hash', 'Ledger', 1, 0, '2026-01-01 00:00:00')"
+                    "INSERT INTO users (id, email, password_hash, display_name, "
+                    "is_active, is_platform_admin, created_at) "
+                    "VALUES (:id, 'ledger@example.test', 'hash', 'Ledger', 1, 0, "
+                    "'2026-01-01 00:00:00')"
                 ),
                 {"id": user_id},
             )
