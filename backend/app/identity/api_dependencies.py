@@ -1,3 +1,4 @@
+import hmac
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, Request, status
@@ -77,7 +78,7 @@ def require_csrf_protection(
     if (
         not cookie_token
         or not header_token
-        or not __import__("hmac").compare_digest(cookie_token, header_token)
+        or not hmac.compare_digest(cookie_token, header_token)
         or not verify_csrf_token(header_token, session.csrf_token_hash)
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
