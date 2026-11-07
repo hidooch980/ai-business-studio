@@ -229,9 +229,9 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
 
     with Session(auth_client.app.state.test_engine) as db:
         membership = db.query(Membership).filter_by(tenant_id=UUID(tenant_id)).one()
-        permission = Permission(code="reports.read", description="Read reports")
+        permission = db.query(Permission).filter_by(code="reports.read").one()
         second_tenant = Tenant(name="Other Tenant", slug="other-tenant")
-        db.add_all([permission, second_tenant])
+        db.add(second_tenant)
         db.flush()
         primary_role = Role(tenant_id=membership.tenant_id, name="report-reader")
         foreign_role = Role(tenant_id=second_tenant.id, name="foreign-report-reader")
