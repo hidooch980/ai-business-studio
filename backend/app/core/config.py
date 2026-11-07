@@ -40,8 +40,12 @@ def get_settings() -> Settings:
         raise ValueError("SESSION_LIFETIME_SECONDS must be between 300 and 2592000")
     app_env = os.getenv("APP_ENV", "development")
     rate_limit_secret = os.getenv("AUTH_RATE_LIMIT_SECRET", "development-only-change-me")
-    if app_env.casefold() == "production" and rate_limit_secret == "development-only-change-me":
-        raise ValueError("AUTH_RATE_LIMIT_SECRET must be set in production")
+    if app_env.casefold() == "production" and (
+        len(rate_limit_secret) < 32
+        or rate_limit_secret == "development-only-change-me"
+        or rate_limit_secret.casefold().startswith("replace-with")
+    ):
+        raise ValueError("AUTH_RATE_LIMIT_SECRET must be a unique secret of at least 32 characters in production")
     attempts = int(os.getenv("AUTH_RATE_LIMIT_ATTEMPTS", "8"))
     window_seconds = int(os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "300"))
     lock_seconds = int(os.getenv("AUTH_RATE_LIMIT_LOCK_SECONDS", "900"))
