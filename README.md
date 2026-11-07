@@ -29,7 +29,7 @@ Implemented in the foundation branch:
 - Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
 - Database-enforced tenant consistency for membership-role assignments and invitation-role references using composite foreign keys.
 - Case-insensitive unique email index enforced by the database.
-- Versioned Alembic migrations `0001_identity` through `0010_transactional_outbox`, including `0009_financial_accounts`, covering identity, CSRF digests, persistent login throttling, append-only audit events, tenant invitations, the financial journal, and product catalog.
+- Versioned Alembic migrations `0001_identity` through `0011_journal_account_links`, including `0009_financial_accounts`, covering identity, CSRF digests, persistent login throttling, append-only audit events, tenant invitations, the financial journal, and product catalog.
 - HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
 - Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; create/resend actions share a 20-per-hour tenant limit; email delivery remains manual until a provider is configured.
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
@@ -38,7 +38,7 @@ Implemented in the foundation branch:
 - Durable transactional outbox foundation: inventory movement events are committed atomically with stock changes; tenant deduplication, SQLite atomic claims, PostgreSQL skip-locked claims, expiring worker leases, retry scheduling and dead-letter state are implemented. A continuously running dispatcher and provider adapters are not yet deployed.
 - Durable transactional outbox foundation: tenant-scoped event deduplication, event enqueue in the inventory movement transaction, worker leases, stale-lease protection, retry scheduling and dead-letter state.
 - Tenant-scoped chart-of-accounts API with typed asset/liability/equity/income/expense accounts, same-type parent hierarchy, tenant-safe composite foreign keys, duplicate-code protection and guarded deactivation. Journal lines are not yet linked to account IDs.
-- Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, and SQLite/PostgreSQL mutation and overposting guards.
+- Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, SQLite/PostgreSQL mutation and overposting guards, and journal-line links to active tenant chart accounts.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Authenticated users can list their own recent sessions and revoke individual sessions, including the current session; revocation is CSRF-protected and audited.
 - Session-bound CSRF tokens are stored as digests and exposed in a separate readable SameSite=Lax cookie; unsafe authentication requests require a matching `X-CSRF-Token` header and same-host Origin/Referer validation when those headers are present.
