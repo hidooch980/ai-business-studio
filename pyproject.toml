@@ -30,7 +30,7 @@ include = ["backend*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -W error"
 
 [tool.ruff]
 line-length = 140
