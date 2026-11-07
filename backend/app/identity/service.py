@@ -135,7 +135,7 @@ def create_csrf_token(db: Session, session: UserSession) -> str:
 
 def login_identifier_hash(email: str, client_ip: str, secret: str) -> str:
     normalized_email = email.strip().casefold()
-    material = f"{normalized_email}\0{client_ip}".encode("utf-8")
+    material = f"{normalized_email}\0{client_ip}".encode()
     return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
 
 
