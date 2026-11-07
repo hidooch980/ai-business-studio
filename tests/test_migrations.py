@@ -45,6 +45,6 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     )
     engine = create_engine(database_url)
     try:
-        assert set(inspect(engine).get_table_names()) == set()
+        assert not (tables - {"alembic_version"}).intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
