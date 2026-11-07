@@ -17,14 +17,14 @@ from backend.app.identity.models import AuditEvent
 from backend.app.identity.service import (
     IdentityConflictError,
     authenticate_user,
+    clear_login_failures,
     create_csrf_token,
     create_user_session,
-    register_user,
-    revoke_session,
-    clear_login_failures,
     is_login_locked,
     login_identifier_hash,
     record_login_failure,
+    register_user,
+    revoke_session,
 )
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
