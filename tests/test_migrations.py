@@ -34,6 +34,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "membership_roles",
             "user_sessions",
             "audit_events",
+            "login_rate_limits",
         }.issubset(tables)
     finally:
         engine.dispose()
