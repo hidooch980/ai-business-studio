@@ -15,7 +15,7 @@ AI Business Studio is planned as an offline-capable platform with shared busines
 - **Local/offline mode:** SQLite on a single local node, with an application-level synchronization protocol. Never share a SQLite database file over a network filesystem.
 - **API:** versioned REST endpoints under `/api/v1`.
 - **Financial and inventory records:** append-only ledgers; corrections use reversal or adjustment entries.
-- **Multi-tenancy:** tenant-scoped data access and authorization checks at service boundaries; only identity membership foundations are currently implemented.
+- **Multi-tenancy:** tenant-scoped data access and authorization checks at service boundaries; identity and the initial product catalog are implemented, but not all business domains.
 - **AI:** provider-independent interfaces; AI suggestions are advisory and sensitive actions require authorized human approval.
 
 ## Current implementation status
@@ -44,17 +44,17 @@ Implemented in the foundation branch:
 - SQLite identity tests and PostgreSQL integration smoke test.
 - CI matrix for Python 3.11/3.12 with PostgreSQL 16, strict pytest warnings, Ruff, dependency vulnerability audit, Compose validation, and a production Docker image build.
 - Container deployment foundation: non-root application image, read-only runtime filesystem, local-only port binding, PostgreSQL storage, and separate application/migration database roles. See [container deployment](docs/deployment/CONTAINER.md).
+- Production configuration rejects SQLite/missing DATABASE_URL and insecure session cookies; SQLite foreign-key enforcement is enabled per connection.
+- CI runs a Python dependency vulnerability audit, Compose validation and Docker build after the test/lint stages.
 
 Not implemented and still required before production use:
 - MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
-- Production configuration now rejects SQLite/missing DATABASE_URL and insecure session cookies; SQLite foreign-key enforcement is enabled per connection.
-- CI runs a Python dependency vulnerability audit after tests.
 - Production-grade security review, rate limiting for invitation creation beyond its current bounded policy, and concurrency/integration testing against production PostgreSQL.
 - Complete accounting domain: chart of accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
 
-- Product, inventory, POS, procurement, CRM, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
+- Product categories/unit conversion, inventory, POS, procurement, sales, CRM, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
 
-The API and ledger are incremental foundations, not a production-ready financial or security boundary. The journal API does not yet provide a chart of accounts, reversal workflow, posting periods, reconciliation, FX conversion, tax handling, or financial statements. Do not expose it to real customer data or public production traffic until the remaining security and accounting controls are implemented and independently verified. A documented or planned capability is not evidence that it is implemented.
+The API and ledger are incremental foundations, not a production-ready financial or security boundary. The journal API supports one-time compensating reversals but does not yet provide a chart of accounts, posting periods, reconciliation, FX conversion, tax handling, or financial statements. Do not expose it to real customer data or public production traffic until the remaining security and accounting controls are implemented and independently verified. A documented or planned capability is not evidence that it is implemented.
 
 ## Development
 
