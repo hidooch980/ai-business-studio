@@ -1,16 +1,14 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from typing import Annotated
-
 from backend.app.db.session import get_db_session
-from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
+from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
 from backend.app.identity.models import AuditEvent, Membership, MembershipRole, Permission, Role, RolePermission
-from backend.app.identity.permissions import PERMISSION_CATALOG
 
 router = APIRouter(prefix="/access", tags=["access-control"])
 
@@ -77,6 +75,7 @@ def list_roles(
 def create_role(
     payload: RoleCreateRequest,
     principal: TenantPrincipal = Depends(require_permission("access.roles.manage")),
+    _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> dict:
     role = Role(tenant_id=principal.tenant.id, name=payload.name, description=payload.description)
@@ -96,6 +95,7 @@ def replace_role_permissions(
     role_id: UUID,
     payload: RolePermissionsRequest,
     principal: TenantPrincipal = Depends(require_permission("access.roles.manage")),
+    _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> dict:
     role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id))
@@ -120,6 +120,7 @@ def assign_membership_role(
     membership_id: UUID,
     role_id: UUID,
     principal: TenantPrincipal = Depends(require_permission("access.memberships.manage")),
+    _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> None:
     membership = db.scalar(select(Membership).where(
