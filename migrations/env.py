@@ -8,6 +8,8 @@ from backend.app.catalog import models as catalog_models  # noqa: F401
 from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.identity import models as identity_models  # noqa: F401
+from backend.app.inventory import models as inventory_models  # noqa: F401
+from backend.app.outbox import models as outbox_models  # noqa: F401
 
 # Import model modules here as domain models are introduced.
 target_metadata = Base.metadata
