@@ -140,7 +140,7 @@ def delete_role(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> None:
-    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id))
+    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id).with_for_update())
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     if role.is_system:
@@ -299,18 +299,18 @@ def set_membership_status(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> dict:
+    _lock_tenant(db, principal.tenant.id)
     membership = db.scalar(
         select(Membership).where(
             Membership.id == membership_id,
             Membership.tenant_id == principal.tenant.id,
-        )
+        ).with_for_update()
     )
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
     if not payload.is_active and membership.user_id == principal.user.id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot deactivate your own membership")
     if not payload.is_active and membership.is_active:
-        _lock_tenant(db, principal.tenant.id)
         owner_role = db.scalar(
             select(Role).where(
                 Role.tenant_id == principal.tenant.id,
@@ -350,17 +350,18 @@ def remove_membership_role(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> None:
+    _lock_tenant(db, principal.tenant.id)
     membership = db.scalar(
         select(Membership).where(
             Membership.id == membership_id,
             Membership.tenant_id == principal.tenant.id,
-        )
+        ).with_for_update()
     )
     role = db.scalar(
         select(Role).where(
             Role.id == role_id,
             Role.tenant_id == principal.tenant.id,
-        )
+        ).with_for_update()
     )
     if membership is None or role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership or role not found")
@@ -374,7 +375,6 @@ def remove_membership_role(
     if assignment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role assignment not found")
     if role.is_system and role.name == "owner" and membership.is_active:
-        _lock_tenant(db, principal.tenant.id)
         if _active_owner_count(db, principal.tenant.id, excluding_membership_id=membership.id) == 0:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The last active owner role cannot be removed")
     db.delete(assignment)
