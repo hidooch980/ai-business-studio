@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from backend.app.db.base import Base
 from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
 from backend.app.identity.models import (
     Membership,
@@ -12,7 +11,6 @@ from backend.app.identity.models import (
     RolePermission,
     Tenant,
 )
-from backend.app.db.session import get_db_session
 
 
 def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: TestClient) -> None:
