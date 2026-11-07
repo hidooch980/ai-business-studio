@@ -172,6 +172,32 @@ def test_public_registration_is_disabled_by_default(monkeypatch: pytest.MonkeyPa
         get_settings.cache_clear()
 
 
+def test_login_rate_limit_also_blocks_password_spraying_across_emails(auth_client: TestClient) -> None:
+    payload = {
+        "email": "spray-target@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Spray Target",
+        "tenant_name": "Spray Target Studio",
+        "tenant_slug": "spray-target-studio",
+    }
+    assert auth_client.post("/api/v1/auth/register", json=payload).status_code == 201
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    assert csrf_token
+    for attempt in range(8):
+        response = auth_client.post(
+            "/api/v1/auth/login",
+            json={"email": f"spray-{attempt}@example.test", "password": "incorrect password"},
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert response.status_code == 401
+    blocked = auth_client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    assert blocked.status_code == 429
+
+
 def test_login_rate_limit_locks_after_eight_failures(auth_client: TestClient) -> None:
     payload = {
         "email": "rate-limit@example.test",
