@@ -34,12 +34,12 @@ Implemented in the foundation branch:
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Session-bound CSRF tokens are stored as digests and exposed in a separate readable SameSite=Lax cookie; unsafe authentication requests require a matching `X-CSRF-Token` header.
 - Public self-registration is disabled by default and requires explicit environment configuration.
-- Successful registration/login audit events and API tests for cookie/session lifecycle and invalid credentials.
+- Successful registration/login and denied login audit events; persistent, database-backed login throttling keyed by an HMAC of normalized email and client IP; API tests for cookie/session lifecycle, CSRF rejection, invalid credentials, and lockout.
 - SQLite identity tests and PostgreSQL integration smoke test.
 - CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service and strict pytest warnings.
 
 Not implemented and still required before production use:
-- Trusted-origin enforcement, persistent login rate limiting, lockout policy, failed-attempt monitoring, MFA, and account recovery.
+- Trusted-origin enforcement, MFA, account recovery, and expanded abuse monitoring. Production deployments must set a strong unique `AUTH_RATE_LIMIT_SECRET`.
 - Persistent login rate limiting, lockout policy, failed-attempt monitoring, MFA, and account recovery.
 - Complete RBAC permission evaluation and enforcement on tenant-scoped business endpoints.
 - Database-enforced append-only audit controls.
