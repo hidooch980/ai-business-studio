@@ -1022,6 +1022,80 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     assert foreign_ledger.status_code == 404
 
 
+
+
+def test_income_statement_and_balance_sheet_are_tenant_scoped_and_reconcile(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "statements-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Statements Owner",
+            "tenant_name": "Statements Studio",
+            "tenant_slug": "statements-studio",
+        },
+    )
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    _create_financial_period(auth_client, tenant_id, "FY-2026", "2026-01-01", "2026-12-31")
+    _create_financial_account(auth_client, tenant_id, "cash", "asset")
+    _create_financial_account(auth_client, tenant_id, "sales", "income")
+    _create_financial_account(auth_client, tenant_id, "rent", "expense")
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+        "Idempotency-Key": "statement-sale",
+    }
+    sale = auth_client.post(
+        "/api/v1/finance/journals",
+        json={
+            "posting_date": "2026-03-01",
+            "currency": "USD",
+            "description": "Cash sale",
+            "lines": [
+                {"account_code": "cash", "debit_minor": 20000, "credit_minor": 0},
+                {"account_code": "sales", "debit_minor": 0, "credit_minor": 20000},
+            ],
+        },
+        headers=headers,
+    )
+    assert sale.status_code == 201, sale.text
+    expense = auth_client.post(
+        "/api/v1/finance/journals",
+        json={
+            "posting_date": "2026-04-01",
+            "currency": "USD",
+            "description": "Rent payment",
+            "lines": [
+                {"account_code": "rent", "debit_minor": 5000, "credit_minor": 0},
+                {"account_code": "cash", "debit_minor": 0, "credit_minor": 5000},
+            ],
+        },
+        headers={**headers, "Idempotency-Key": "statement-rent"},
+    )
+    assert expense.status_code == 201, expense.text
+    income = auth_client.get(
+        "/api/v1/finance/reports/income-statement",
+        params={"start_date": "2026-01-01", "end_date": "2026-12-31", "currency": "usd"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert income.status_code == 200, income.text
+    assert income.json()["total_income_minor"] == 20000
+    assert income.json()["total_expenses_minor"] == 5000
+    assert income.json()["net_income_minor"] == 15000
+    assert income.json()["is_complete"] is True
+    balance = auth_client.get(
+        "/api/v1/finance/reports/balance-sheet",
+        params={"as_of": "2026-12-31", "currency": "USD"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert balance.status_code == 200, balance.text
+    assert balance.json()["total_assets_minor"] == 15000
+    assert balance.json()["net_income_to_date_minor"] == 15000
+    assert balance.json()["total_liabilities_and_equity_minor"] == 15000
+    assert balance.json()["is_balanced"] is True
+    assert balance.json()["unmapped_journal_lines"] == 0
+
 def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestClient) -> None:
     registered = auth_client.post(
         "/api/v1/auth/register",
