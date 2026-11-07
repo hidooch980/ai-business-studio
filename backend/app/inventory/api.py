@@ -39,6 +39,21 @@ class WarehouseCreateRequest(BaseModel):
     name: WarehouseName
 
 
+class WarehouseUpdateRequest(BaseModel):
+    name: WarehouseName | None = None
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def require_update(self) -> "WarehouseUpdateRequest":
+        if not self.model_fields_set:
+            raise ValueError("At least one warehouse field must be supplied")
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("Warehouse name cannot be null")
+        if "is_active" in self.model_fields_set and self.is_active is None:
+            raise ValueError("Warehouse active state cannot be null")
+        return self
+
+
 class MovementCreateRequest(BaseModel):
     warehouse_id: UUID
     product_id: UUID
@@ -151,6 +166,44 @@ def list_warehouses(
     return {"items": [_warehouse_dict(item) for item in items], "limit": limit, "offset": offset}
 
 
+@router.patch("/warehouses/{warehouse_id}")
+def update_warehouse(
+    warehouse_id: UUID,
+    payload: WarehouseUpdateRequest,
+    principal: TenantPrincipal = Depends(require_permission("inventory.write")),
+    _csrf: None = Depends(require_csrf_protection),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    warehouse = db.scalar(
+        select(Warehouse)
+        .where(Warehouse.id == warehouse_id, Warehouse.tenant_id == principal.tenant.id)
+        .with_for_update()
+    )
+    if warehouse is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warehouse not found")
+    if payload.is_active is False and warehouse.is_active:
+        has_stock = db.scalar(
+            select(InventoryBalance.id)
+            .where(
+                InventoryBalance.tenant_id == principal.tenant.id,
+                InventoryBalance.warehouse_id == warehouse.id,
+                InventoryBalance.quantity_on_hand > 0,
+            )
+            .limit(1)
+        ) is not None
+        if has_stock:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A warehouse with stock on hand cannot be deactivated")
+    if payload.name is not None:
+        warehouse.name = payload.name
+    if payload.is_active is not None:
+        warehouse.is_active = payload.is_active
+    warehouse.updated_at = datetime.now(UTC)
+    _audit(db, principal, "inventory.warehouse_updated", "warehouse", warehouse.id)
+    db.commit()
+    db.refresh(warehouse)
+    return _warehouse_dict(warehouse)
+
+
 @router.post("/movements", status_code=status.HTTP_201_CREATED)
 def create_inventory_movement(
     payload: MovementCreateRequest,
@@ -175,11 +228,13 @@ def create_inventory_movement(
         return {**_movement_dict(existing), "replayed": True}
 
     warehouse = db.scalar(
-        select(Warehouse).where(
+        select(Warehouse)
+        .where(
             Warehouse.id == payload.warehouse_id,
             Warehouse.tenant_id == principal.tenant.id,
             Warehouse.is_active.is_(True),
         )
+        .with_for_update()
     )
     product = db.scalar(
         select(Product)
