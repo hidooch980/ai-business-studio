@@ -1,28 +1,35 @@
+import os
+import subprocess
+import sys
 from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 from backend.app.core.config import get_settings
-from backend.app.db.base import Base
 from backend.app.db.session import get_db_session
 from backend.app.main import create_app
 
 
 @pytest.fixture
-def inventory_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
+def inventory_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[TestClient, None, None]:
     monkeypatch.setenv("ALLOW_PUBLIC_REGISTRATION", "true")
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "false")
     get_settings.cache_clear()
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+    database_url = f"sqlite:///{tmp_path / 'inventory.db'}"
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = database_url
+    migration = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        check=False,
+        env=environment,
+        capture_output=True,
+        text=True,
     )
-    Base.metadata.create_all(engine)
+    assert migration.returncode == 0, f"{migration.stdout}\n{migration.stderr}"
+    engine = create_engine(database_url, connect_args={"check_same_thread": False})
     application = create_app()
 
     def override_db() -> Generator[Session, None, None]:
