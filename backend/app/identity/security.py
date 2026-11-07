@@ -1,6 +1,6 @@
 import hashlib
-import secrets
 import hmac
+import secrets
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
