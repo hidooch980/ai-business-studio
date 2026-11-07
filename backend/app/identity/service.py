@@ -174,7 +174,7 @@ def login_identifier_hash(email: str, client_ip: str, secret: str) -> str:
 
 def login_ip_identifier_hash(client_ip: str, secret: str) -> str:
     """Return a keyed identifier shared by login attempts from the same client IP."""
-    material = f"ip\0{client_ip}".encode("utf-8")
+    material = f"ip\0{client_ip}".encode()
     return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
 
 
