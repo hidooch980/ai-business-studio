@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily encrypted AI Business Studio PostgreSQL backup schedule
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+Unit=ai-business-studio-backup.service
+
+[Install]
+WantedBy=timers.target
