@@ -12,6 +12,7 @@ from backend.app.catalog.models import Product
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
 from backend.app.identity.models import AuditEvent
+from backend.app.inventory.models import InventoryBalance
 
 router = APIRouter(prefix="/catalog/products", tags=["product-catalog"])
 
@@ -45,6 +46,18 @@ class ProductUpdateRequest(BaseModel):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
+
+
+def _has_stock_on_hand(db: Session, tenant_id: UUID, product_id: UUID) -> bool:
+    return db.scalar(
+        select(InventoryBalance.id)
+        .where(
+            InventoryBalance.tenant_id == tenant_id,
+            InventoryBalance.product_id == product_id,
+            InventoryBalance.quantity_on_hand > 0,
+        )
+        .limit(1)
+    ) is not None
 
 
 def _serialize(product: Product) -> dict:
@@ -144,6 +157,8 @@ def update_product(
     )
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    if payload.is_active is False and product.is_active and _has_stock_on_hand(db, principal.tenant.id, product.id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A product with stock on hand cannot be deactivated")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
     product.updated_at = datetime.now(UTC)
@@ -171,6 +186,8 @@ def deactivate_product(
     )
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    if product.is_active and _has_stock_on_hand(db, principal.tenant.id, product.id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A product with stock on hand cannot be deactivated")
     if product.is_active:
         product.is_active = False
         product.updated_at = datetime.now(UTC)
