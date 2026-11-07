@@ -24,6 +24,7 @@ from backend.app.identity.service import (
     create_user_session,
     is_login_locked,
     login_identifier_hash,
+    login_account_identifier_hash,
     login_ip_identifier_hash,
     prune_login_rate_limits,
     record_login_failure,
@@ -134,8 +135,13 @@ def login(
     settings = get_settings()
     client_ip = request.client.host if request.client is not None else "unknown"
     identifier_hash = login_identifier_hash(payload.email, client_ip, settings.auth_rate_limit_secret)
+    account_identifier_hash = login_account_identifier_hash(payload.email, settings.auth_rate_limit_secret)
     ip_identifier_hash = login_ip_identifier_hash(client_ip, settings.auth_rate_limit_secret)
-    if is_login_locked(db, identifier_hash) or is_login_locked(db, ip_identifier_hash):
+    if (
+        is_login_locked(db, identifier_hash)
+        or is_login_locked(db, account_identifier_hash)
+        or is_login_locked(db, ip_identifier_hash)
+    ):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again later.")
     user = authenticate_user(db, email=payload.email, password=payload.password)
     if user is None:
@@ -147,6 +153,13 @@ def login(
             window_seconds=settings.auth_rate_limit_window_seconds,
             lock_seconds=settings.auth_rate_limit_lock_seconds,
         )
+        account_locked = record_login_failure(
+            db,
+            identifier_hash=account_identifier_hash,
+            max_attempts=settings.auth_rate_limit_attempts,
+            window_seconds=settings.auth_rate_limit_window_seconds,
+            lock_seconds=settings.auth_rate_limit_lock_seconds,
+        )
         ip_locked = record_login_failure(
             db,
             identifier_hash=ip_identifier_hash,
@@ -154,7 +167,7 @@ def login(
             window_seconds=settings.auth_rate_limit_window_seconds,
             lock_seconds=settings.auth_rate_limit_lock_seconds,
         )
-        locked = locked or ip_locked
+        locked = locked or account_locked or ip_locked
         db.add(
             AuditEvent(
                 action="auth.login_failed",
@@ -168,6 +181,7 @@ def login(
             raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again later.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     clear_login_failures(db, identifier_hash)
+    clear_login_failures(db, account_identifier_hash)
     token, session = create_user_session(
         db,
         user=user,
