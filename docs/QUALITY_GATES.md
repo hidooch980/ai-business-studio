@@ -26,7 +26,8 @@ This document defines the minimum evidence required before a change can be merge
 
 - CI permissions follow least privilege.
 - Third-party GitHub Actions are reviewed and pinned to immutable commit SHAs before production release.
-- Dependency vulnerability scanning and secret scanning must be enabled.
+- [x] Python dependency vulnerability audit runs in CI.
+- [ ] Repository secret scanning and verified third-party action pinning must be enabled before release.
 - Authentication, authorization, tenant isolation, rate limiting, and audit events require negative tests.
 - Production credentials and signing keys are supplied only through protected secret storage.
 - Webhooks require signature verification, replay protection, and idempotent processing.
