@@ -3,7 +3,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-
 EmailInput = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=320)]
 PasswordInput = Annotated[str, StringConstraints(min_length=12, max_length=256)]
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
