@@ -760,6 +760,64 @@ def _create_financial_account(
     return response.json()
 
 
+def _create_financial_period(
+    client: TestClient,
+    tenant_id: str,
+    name: str = "FY-2000-2100",
+    start_date: str = "2000-01-01",
+    end_date: str = "2100-12-31",
+) -> dict:
+    response = client.post(
+        "/api/v1/finance/periods",
+        json={"name": name, "start_date": start_date, "end_date": end_date},
+        headers={
+            "X-Tenant-ID": tenant_id,
+            "X-CSRF-Token": client.cookies.get("abs_csrf"),
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_financial_periods_reject_overlap_and_close_once(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "period-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Period Owner",
+            "tenant_name": "Period Studio",
+            "tenant_slug": "period-studio",
+        },
+    )
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+    }
+    period = _create_financial_period(auth_client, tenant_id, "FY-2026", "2026-01-01", "2026-12-31")
+    overlap = auth_client.post(
+        "/api/v1/finance/periods",
+        json={"name": "Q4-2026", "start_date": "2026-10-01", "end_date": "2027-01-31"},
+        headers=headers,
+    )
+    assert overlap.status_code == 409
+    closed = auth_client.post(f"/api/v1/finance/periods/{period['id']}/close", headers=headers)
+    assert closed.status_code == 200
+    assert closed.json()["status"] == "closed"
+    closed_again = auth_client.post(f"/api/v1/finance/periods/{period['id']}/close", headers=headers)
+    assert closed_again.status_code == 200
+    assert closed_again.json()["status"] == "closed"
+    open_periods = auth_client.get(
+        "/api/v1/finance/periods",
+        params={"include_closed": False},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert open_periods.status_code == 200
+    assert open_periods.json()["items"] == []
+
+
 def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client: TestClient) -> None:
     registered = auth_client.post(
         "/api/v1/auth/register",
@@ -773,6 +831,7 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     )
     assert registered.status_code == 201
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    _create_financial_period(auth_client, tenant_id)
     _create_financial_account(auth_client, tenant_id, "cash", "asset")
     _create_financial_account(auth_client, tenant_id, "accounts-receivable", "asset")
     headers = {
@@ -792,6 +851,7 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     assert created.status_code == 201
     assert created.json()["created"] is True
     assert created.json()["currency"] == "USD"
+    assert created.json()["posting_date"]
     assert len(created.json()["lines"]) == 2
     assert all(line["financial_account_id"] for line in created.json()["lines"])
     replay = auth_client.post("/api/v1/finance/journals", json=payload, headers=headers)
@@ -837,6 +897,23 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
         entry = db.query(JournalEntry).one()
         assert entry.tenant_id == UUID(tenant_id)
 
+    period_id = auth_client.get(
+        "/api/v1/finance/periods",
+        headers={"X-Tenant-ID": tenant_id},
+    ).json()["items"][0]["id"]
+    closed_period = auth_client.post(
+        f"/api/v1/finance/periods/{period_id}/close",
+        headers=headers,
+    )
+    assert closed_period.status_code == 200
+    assert closed_period.json()["status"] == "closed"
+    closed_period_post = auth_client.post(
+        "/api/v1/finance/journals",
+        json=payload,
+        headers={**headers, "Idempotency-Key": "closed-period-post"},
+    )
+    assert closed_period_post.status_code == 409
+
     other_registration = auth_client.post(
         "/api/v1/auth/register",
         json={
@@ -850,6 +927,7 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     )
     assert other_registration.status_code == 201
     other_tenant_id = other_registration.json()["memberships"][0]["tenant_id"]
+    _create_financial_period(auth_client, other_tenant_id)
     cross_tenant_post = auth_client.post(
         "/api/v1/finance/journals",
         json=payload,
@@ -874,6 +952,7 @@ def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestCl
         },
     )
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    _create_financial_period(auth_client, tenant_id)
     cash_account = _create_financial_account(auth_client, tenant_id, "cash", "asset")
     _create_financial_account(auth_client, tenant_id, "sales", "income")
     headers = {
