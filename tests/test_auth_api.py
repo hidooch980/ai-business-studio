@@ -60,12 +60,20 @@ def test_register_login_me_and_logout_cookie_flow(auth_client: TestClient) -> No
     assert "httponly" in cookie_header
     assert "samesite=lax" in cookie_header
     assert "secure" not in cookie_header
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    assert csrf_token
+    csrf_cookie_header = registered.headers.get_list("set-cookie")[1].casefold()
+    assert "httponly" not in csrf_cookie_header
 
     current = auth_client.get("/api/v1/auth/me")
     assert current.status_code == 200
     assert current.json()["user"]["id"] == registered.json()["user"]["id"]
 
-    logout = auth_client.post("/api/v1/auth/logout")
+    rejected_logout = auth_client.post("/api/v1/auth/logout")
+    assert rejected_logout.status_code == 403
+    assert auth_client.get("/api/v1/auth/me").status_code == 200
+
+    logout = auth_client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": csrf_token})
     assert logout.status_code == 204
     assert auth_client.get("/api/v1/auth/me").status_code == 401
 
@@ -87,7 +95,12 @@ def test_auth_api_rejects_invalid_credentials_and_duplicate_registration(auth_cl
     }
     assert auth_client.post("/api/v1/auth/register", json=payload).status_code == 201
     duplicate = {**payload, "email": "DUPLICATE@example.test"}
-    assert auth_client.post("/api/v1/auth/register", json=duplicate).status_code == 409
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    assert auth_client.post(
+        "/api/v1/auth/register",
+        json=duplicate,
+        headers={"X-CSRF-Token": csrf_token},
+    ).status_code == 409
     invalid = auth_client.post(
         "/api/v1/auth/login",
         json={"email": "duplicate@example.test", "password": "not the password"},
