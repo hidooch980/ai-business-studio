@@ -166,7 +166,6 @@ def login(
             raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again later.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     clear_login_failures(db, identifier_hash)
-    clear_login_failures(db, ip_identifier_hash)
     token, session = create_user_session(
         db,
         user=user,
