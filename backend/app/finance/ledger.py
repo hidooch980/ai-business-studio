@@ -5,6 +5,7 @@ import json
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.identity.models import AuditEvent, JournalEntry, JournalLine
@@ -94,7 +95,21 @@ def create_journal_entry(
         created_by_user_id=actor_user_id,
     )
     db.add(entry)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raced = db.scalar(
+            select(JournalEntry).where(
+                JournalEntry.tenant_id == tenant_id,
+                JournalEntry.idempotency_key == key,
+            )
+        )
+        if raced is None:
+            raise
+        if raced.request_hash != digest:
+            raise JournalConflictError("Idempotency-Key was already used for a different journal entry")
+        return raced, False
     db.add_all(
         [
             JournalLine(
