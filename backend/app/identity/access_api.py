@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
-from backend.app.identity.models import AuditEvent, Membership, MembershipRole, Permission, Role, RolePermission, User
+from backend.app.identity.models import AuditEvent, Membership, MembershipRole, Permission, Role, RolePermission, Tenant, User
 
 router = APIRouter(prefix="/access", tags=["access-control"])
 
@@ -148,6 +148,10 @@ def assign_membership_role(
 
 
 
+def _lock_tenant(db: Session, tenant_id: UUID) -> None:
+    db.scalar(select(Tenant.id).where(Tenant.id == tenant_id).with_for_update())
+
+
 def _active_owner_count(db: Session, tenant_id: UUID, excluding_membership_id: UUID | None = None) -> int:
     statement = (
         select(func.count(MembershipRole.id))
@@ -225,6 +229,7 @@ def set_membership_status(
     if not payload.is_active and membership.user_id == principal.user.id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot deactivate your own membership")
     if not payload.is_active and membership.is_active:
+        _lock_tenant(db, principal.tenant.id)
         owner_role = db.scalar(
             select(Role).where(
                 Role.tenant_id == principal.tenant.id,
@@ -288,6 +293,7 @@ def remove_membership_role(
     if assignment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role assignment not found")
     if role.is_system and role.name == "owner" and membership.is_active:
+        _lock_tenant(db, principal.tenant.id)
         if _active_owner_count(db, principal.tenant.id, excluding_membership_id=membership.id) == 0:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The last active owner role cannot be removed")
     db.delete(assignment)
