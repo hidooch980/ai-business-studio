@@ -44,3 +44,11 @@ def test_valid_production_configuration_is_accepted(monkeypatch: pytest.MonkeyPa
     assert settings.app_env == "production"
     assert settings.session_cookie_secure is True
     assert settings.database_url.startswith("postgresql+psycopg://")
+
+
+def test_production_normalizes_postgresql_driver(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_SECRET", "unique-production-secret-" + "x" * 32)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://app:secret@localhost/app")
+    settings = get_settings()
+    assert settings.database_url.startswith("postgresql+psycopg://")
