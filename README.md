@@ -33,16 +33,17 @@ Implemented in the foundation branch:
 - Environment-based application and optional database configuration.
 - SQLAlchemy engine/session foundation with lazy connection behavior.
 - Initial identity schema for tenants, users, memberships, tenant roles, permissions, sessions, and audit events.
-- Argon2 password-hashing and opaque session-token digest primitives.
-- SQLite schema-creation and identity-security unit tests.
-- Alembic migration environment.
+- Argon2 password hashing and opaque session-token digest primitives.
+- Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
+- Explicit initial Alembic revision (`0001_identity`) for the tenant and identity tables.
+- SQLite tests for identity models, authentication primitives, session lifecycle, tenant role assignment, and migration upgrade/downgrade.
 - SQLite database unit test and PostgreSQL connectivity integration smoke test.
 - CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service.
 
 Not implemented yet:
-- Production-ready login/logout endpoints, session cookie policy, CSRF protection, account recovery, MFA, and rate limiting.
-- Enforced tenant-scoped authorization across every business API and cross-tenant security tests.
-- Role/permission administration APIs and immutable audit enforcement at the database layer.
+- Production login/logout HTTP endpoints, secure session-cookie policy, CSRF protection, account recovery, MFA, and rate limiting. The current identity service functions are backend primitives, not a production authentication API.
+- Database-enforced cross-tenant role-assignment constraints. The current service rejects cross-tenant role assignments, but direct database writes are not yet protected by composite tenant foreign keys.
+- Tenant-scoped authorization across every business API, role/permission administration APIs, and immutable audit enforcement at the database layer.
 - Product, inventory, POS, procurement, CRM, ERP, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
 
 A documented or planned capability is not evidence that it is implemented or production-ready. No production deployment or release is declared.
