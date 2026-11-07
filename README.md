@@ -44,6 +44,8 @@ Implemented in the foundation branch:
 
 Not implemented and still required before production use:
 - MFA, account recovery, expanded abuse monitoring, and full session/device management.
+- Production configuration now rejects SQLite/missing DATABASE_URL and insecure session cookies; SQLite foreign-key enforcement is enabled per connection.
+- CI runs a Python dependency vulnerability audit after tests.
 - Production-grade security review, rate limiting for invitation creation beyond its current bounded policy, and concurrency/integration testing against production PostgreSQL.
 - Complete accounting domain: chart of accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
 
