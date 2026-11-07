@@ -131,7 +131,7 @@ def test_postgresql_concurrent_owner_deactivation_preserves_last_owner() -> None
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
 
-    from fastapi import HTTPException
+    from fastapi import HTTPException, status
     from sqlalchemy.orm import sessionmaker
 
     from backend.app.identity.access_api import MembershipStatusRequest, set_membership_status
