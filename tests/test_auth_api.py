@@ -216,6 +216,11 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
 
     auth_client.app.include_router(router, prefix="/api/v1/test")
 
+    with Session(auth_client.app.state.test_engine) as db:
+        membership = db.query(Membership).filter_by(tenant_id=UUID(tenant_id)).one()
+        db.query(MembershipRole).filter_by(membership_id=membership.id).delete()
+        db.commit()
+
     denied = auth_client.get(
         "/api/v1/test/rbac-probe",
         headers={**auth_headers, "X-Tenant-ID": tenant_id},
