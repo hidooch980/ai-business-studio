@@ -36,9 +36,18 @@ def upgrade() -> None:
     )
     op.create_index("ix_tenant_invitations_tenant_email", "tenant_invitations", ["tenant_id", "email"])
     op.create_index("ix_tenant_invitations_expires_at", "tenant_invitations", ["expires_at"])
+    op.create_index(
+        "uq_tenant_invitations_pending_email",
+        "tenant_invitations",
+        ["tenant_id", "email"],
+        unique=True,
+        sqlite_where=sa.text("accepted_at IS NULL AND revoked_at IS NULL"),
+        postgresql_where=sa.text("accepted_at IS NULL AND revoked_at IS NULL"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("uq_tenant_invitations_pending_email", table_name="tenant_invitations")
     op.drop_index("ix_tenant_invitations_expires_at", table_name="tenant_invitations")
     op.drop_index("ix_tenant_invitations_tenant_email", table_name="tenant_invitations")
     op.drop_table("tenant_invitations")
