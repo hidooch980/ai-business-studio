@@ -52,5 +52,14 @@ jobs:
           python -m pip install --upgrade pip "setuptools>=84.1.0"
           python -m pip install pip-audit
           pip-audit --skip-editable
+      - name: Validate Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-postgres-password
+          APP_DB_PASSWORD: ci-app-password
+          MIGRATOR_DB_PASSWORD: ci-migrator-password
+          AUTH_RATE_LIMIT_SECRET: ci-auth-rate-limit-secret-0123456789abcdef
+          DATABASE_URL: postgresql+psycopg://abs_app:ci-app-password@db:5432/ai_business_studio
+          MIGRATION_DATABASE_URL: postgresql+psycopg://abs_migrator:ci-migrator-password@db:5432/ai_business_studio
+        run: docker compose config --quiet
       - name: Build production container
         run: docker build --tag ai-business-studio:ci .
