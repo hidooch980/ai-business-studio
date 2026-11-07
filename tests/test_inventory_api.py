@@ -47,6 +47,7 @@ def inventory_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[Tes
 
 
 def _register(client: TestClient, email: str, tenant_slug: str) -> tuple[str, str]:
+    csrf_token = client.cookies.get("abs_csrf")
     response = client.post(
         "/api/v1/auth/register",
         json={
@@ -56,6 +57,7 @@ def _register(client: TestClient, email: str, tenant_slug: str) -> tuple[str, st
             "tenant_name": "Inventory Studio",
             "tenant_slug": tenant_slug,
         },
+        headers={"X-CSRF-Token": csrf_token} if csrf_token else None,
     )
     assert response.status_code == 201, response.text
     return response.json()["memberships"][0]["tenant_id"], client.cookies.get("abs_csrf", "")
