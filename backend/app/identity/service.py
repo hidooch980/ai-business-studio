@@ -178,6 +178,15 @@ def login_ip_identifier_hash(client_ip: str, secret: str) -> str:
     return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
 
 
+def prune_login_rate_limits(db: Session, retention_days: int = 30) -> int:
+    if retention_days < 1:
+        raise ValueError("retention_days must be positive")
+    result = db.execute(
+        delete(LoginRateLimit).where(LoginRateLimit.updated_at < datetime.now(UTC) - timedelta(days=retention_days))
+    )
+    return result.rowcount or 0
+
+
 def is_login_locked(db: Session, identifier_hash: str) -> bool:
     record = db.scalar(select(LoginRateLimit).where(LoginRateLimit.identifier_hash == identifier_hash))
     if record is None or record.locked_until is None:
