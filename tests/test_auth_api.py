@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 from backend.app.core.config import get_settings
 from backend.app.db.base import Base
@@ -18,7 +19,11 @@ def auth_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, 
     monkeypatch.setenv("SESSION_LIFETIME_SECONDS", "3600")
     get_settings.cache_clear()
 
-    engine = create_engine("sqlite://")
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
 
     Base.metadata.create_all(engine)
     application = create_app()
