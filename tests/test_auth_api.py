@@ -71,6 +71,11 @@ def test_register_login_me_and_logout_cookie_flow(auth_client: TestClient) -> No
 
     rejected_logout = auth_client.post("/api/v1/auth/logout")
     assert rejected_logout.status_code == 403
+    untrusted_origin = auth_client.post(
+        "/api/v1/auth/logout",
+        headers={"X-CSRF-Token": csrf_token, "Origin": "https://attacker.example"},
+    )
+    assert untrusted_origin.status_code == 403
     assert auth_client.get("/api/v1/auth/me").status_code == 200
 
     logout = auth_client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": csrf_token})
@@ -167,3 +172,14 @@ def test_login_rate_limit_locks_after_eight_failures(auth_client: TestClient) ->
         headers={"X-CSRF-Token": csrf_token},
     )
     assert blocked.status_code == 429
+
+
+def test_production_rejects_placeholder_rate_limit_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_SECRET", "replace-with-a-long-random-secret")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="AUTH_RATE_LIMIT_SECRET"):
+            get_settings()
+    finally:
+        get_settings.cache_clear()
