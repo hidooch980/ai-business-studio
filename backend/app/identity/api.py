@@ -216,6 +216,7 @@ def revoke_user_session(
     session_id: str,
     response: Response,
     principal: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> Response:
     try:
