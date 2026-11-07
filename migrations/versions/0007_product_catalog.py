@@ -78,16 +78,23 @@ def upgrade() -> None:
 
     owner_ids = connection.execute(
         sa.select(roles.c.id).where(roles.c.name == "owner", roles.c.is_system.is_(True))
-    ).scalars()
+    ).scalars().all()
+    existing_assignments = set(
+        connection.execute(
+            sa.select(role_permissions.c.role_id, role_permissions.c.permission_id).where(
+                role_permissions.c.permission_id.in_(list(existing.values()))
+            )
+        ).all()
+    )
     for role_id in owner_ids:
         for permission_id in existing.values():
-            connection.execute(
-                sa.insert(role_permissions)
-                .values(role_id=role_id, permission_id=permission_id)
-                .prefix_with("OR IGNORE")
-                if connection.dialect.name == "sqlite"
-                else sa.insert(role_permissions).values(role_id=role_id, permission_id=permission_id).on_conflict_do_nothing()
-            )
+            if (role_id, permission_id) not in existing_assignments:
+                connection.execute(
+                    sa.insert(role_permissions).values(
+                        role_id=role_id,
+                        permission_id=permission_id,
+                    )
+                )
 
 
 def downgrade() -> None:
@@ -96,14 +103,10 @@ def downgrade() -> None:
         sa.text("SELECT id FROM permissions WHERE code IN ('catalog.read', 'catalog.write')")
     ).scalars().all()
     if permission_ids:
-        connection.execute(
-            sa.text("DELETE FROM role_permissions WHERE permission_id = ANY(:ids)")
-            if connection.dialect.name == "postgresql"
-            else sa.text("DELETE FROM role_permissions WHERE permission_id IN :ids").bindparams(
-                sa.bindparam("ids", expanding=True)
-            ),
-            {"ids": permission_ids},
-        )
+        statement = sa.text(
+            "DELETE FROM role_permissions WHERE permission_id IN :ids"
+        ).bindparams(sa.bindparam("ids", expanding=True))
+        connection.execute(statement, {"ids": permission_ids})
         connection.execute(
             sa.text("DELETE FROM permissions WHERE code IN ('catalog.read', 'catalog.write')")
         )
