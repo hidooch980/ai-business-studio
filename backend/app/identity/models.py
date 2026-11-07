@@ -170,6 +170,10 @@ class JournalEntry(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "id", name="uq_journal_entries_tenant_id_id"),
         UniqueConstraint("tenant_id", "idempotency_key", name="uq_journal_entries_tenant_idempotency"),
+        CheckConstraint(
+            "debit_total_minor > 0 AND debit_total_minor = credit_total_minor",
+            name="ck_journal_entry_balanced_totals",
+        ),
         Index("ix_journal_entries_tenant_created", "tenant_id", "created_at"),
     )
 
@@ -179,6 +183,8 @@ class JournalEntry(Base):
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
+    debit_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    credit_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
