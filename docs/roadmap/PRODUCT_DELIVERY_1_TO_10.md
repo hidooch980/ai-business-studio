@@ -172,3 +172,9 @@ Status: **Blocked**
 - [ ] Merge PR and publish release only after approval.
 
 A green foundation CI run is not evidence that stages 2-10 are complete. The current branch is not production-ready and must not be used for real customer financial records.
+
+## Master ERP architecture baseline
+
+The comprehensive target architecture, domain boundaries, cross-module invariants, AI governance, integration requirements, phased delivery gates, and module definition-of-done are maintained in [MASTER_ERP_BLUEPRINT.md](../architecture/MASTER_ERP_BLUEPRINT.md).
+
+This blueprint is approved scope only. The checkboxes and stage statuses above remain the execution ledger; do not mark any capability complete until its implementation, migrations, tests, CI evidence, and operational acceptance exist on the same commit.
