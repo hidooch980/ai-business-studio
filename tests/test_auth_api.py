@@ -548,6 +548,12 @@ def test_invitation_create_accept_is_one_time_and_tenant_scoped(auth_client: Tes
     )
     assert created.status_code == 201
     token = created.json()["invitation_token"]
+    duplicate_pending = auth_client.post(
+        "/api/v1/invitations",
+        json={"email": "NEW.MEMBER@example.test", "display_name": "Duplicate", "role_id": role_id},
+        headers=headers,
+    )
+    assert duplicate_pending.status_code == 409
     assert created.json()["delivery"] == "manual"
     assert created.json()["email"] == "new.member@example.test"
 
