@@ -46,21 +46,6 @@ def upgrade() -> None:
     dialect = op.get_bind().dialect.name
     if dialect == "postgresql":
         op.execute(sa.text("UPDATE journal_entries SET posting_date = created_at::date WHERE posting_date IS NULL"))
-    elif dialect == "sqlite":
-        op.execute(sa.text("UPDATE journal_entries SET posting_date = date(created_at) WHERE posting_date IS NULL"))
-        op.execute(sa.text("""
-            CREATE TRIGGER journal_entries_require_open_period
-            BEFORE INSERT ON journal_entries
-            WHEN NOT EXISTS (
-                SELECT 1 FROM financial_periods
-                 WHERE tenant_id = NEW.tenant_id
-                   AND start_date <= NEW.posting_date
-                   AND end_date >= NEW.posting_date
-                   AND status = 'open'
-            )
-            BEGIN SELECT RAISE(ABORT, 'journal posting requires an open accounting period'); END
-        """))
-    elif dialect == "postgresql":
         op.execute(sa.text("""
             CREATE FUNCTION enforce_journal_period_open()
             RETURNS trigger LANGUAGE plpgsql AS $period$
@@ -83,6 +68,20 @@ def upgrade() -> None:
             CREATE TRIGGER journal_entries_require_open_period
             BEFORE INSERT ON journal_entries
             FOR EACH ROW EXECUTE FUNCTION enforce_journal_period_open()
+        """))
+    elif dialect == "sqlite":
+        op.execute(sa.text("UPDATE journal_entries SET posting_date = date(created_at) WHERE posting_date IS NULL"))
+        op.execute(sa.text("""
+            CREATE TRIGGER journal_entries_require_open_period
+            BEFORE INSERT ON journal_entries
+            WHEN NOT EXISTS (
+                SELECT 1 FROM financial_periods
+                 WHERE tenant_id = NEW.tenant_id
+                   AND start_date <= NEW.posting_date
+                   AND end_date >= NEW.posting_date
+                   AND status = 'open'
+            )
+            BEGIN SELECT RAISE(ABORT, 'journal posting requires an open accounting period'); END
         """))
     else:
         raise RuntimeError(f"Unsupported database dialect for accounting periods: {dialect}")
