@@ -45,6 +45,7 @@ def create_journal_entry(
     currency: str,
     description: str,
     lines: list[dict],
+    reversal_of_id: UUID | None = None,
 ) -> tuple[JournalEntry, bool]:
     key = idempotency_key.strip()
     if not key or len(key) > 128:
@@ -74,7 +75,8 @@ def create_journal_entry(
             raise ValueError("Journal totals exceed the supported integer range")
     if debit_total == 0 or debit_total != credit_total:
         raise ValueError("Journal entry must balance: total debits must equal total credits")
-    digest = _request_hash(payload)
+    hash_payload = {**payload, "reversal_of_id": str(reversal_of_id) if reversal_of_id else None}
+    digest = _request_hash(hash_payload)
     existing = db.scalar(
         select(JournalEntry).where(
             JournalEntry.tenant_id == tenant_id,
@@ -90,6 +92,7 @@ def create_journal_entry(
         tenant_id=tenant_id,
         idempotency_key=key,
         request_hash=digest,
+        reversal_of_id=reversal_of_id,
         currency=payload["currency"],
         description=payload["description"],
         debit_total_minor=debit_total,
@@ -107,10 +110,17 @@ def create_journal_entry(
                 JournalEntry.idempotency_key == key,
             )
         )
+        if raced is None and reversal_of_id is not None:
+            raced = db.scalar(
+                select(JournalEntry).where(
+                    JournalEntry.tenant_id == tenant_id,
+                    JournalEntry.reversal_of_id == reversal_of_id,
+                )
+            )
         if raced is None:
             raise
-        if raced.request_hash != digest:
-            raise JournalConflictError("Idempotency-Key was already used for a different journal entry")
+        if raced.idempotency_key != key or raced.request_hash != digest:
+            raise JournalConflictError("Journal entry already has a different reversal or the key was reused")
         return raced, False
     db.add_all(
         [
@@ -164,3 +174,53 @@ def serialize_journal_entry(db: Session, entry: JournalEntry) -> dict:
             for line in lines
         ],
     }
+
+
+
+def reverse_journal_entry(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    actor_user_id: UUID,
+    journal_entry_id: UUID,
+    idempotency_key: str,
+) -> tuple[JournalEntry, bool]:
+    original = db.scalar(
+        select(JournalEntry)
+        .where(
+            JournalEntry.id == journal_entry_id,
+            JournalEntry.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if original is None:
+        raise ValueError("Journal entry not found")
+    original_lines = db.scalars(
+        select(JournalLine)
+        .where(
+            JournalLine.tenant_id == tenant_id,
+            JournalLine.journal_entry_id == original.id,
+        )
+        .order_by(JournalLine.line_number)
+    ).all()
+    if len(original_lines) < 2:
+        raise ValueError("Journal entry has no valid posted lines")
+    reversal_lines = [
+        {
+            "account_code": line.account_code,
+            "memo": f"Reversal: {line.memo}" if line.memo else "Reversal",
+            "debit_minor": line.credit_minor,
+            "credit_minor": line.debit_minor,
+        }
+        for line in original_lines
+    ]
+    return create_journal_entry(
+        db,
+        tenant_id=tenant_id,
+        actor_user_id=actor_user_id,
+        idempotency_key=idempotency_key,
+        currency=original.currency,
+        description=f"Reversal of {original.id}: {original.description}"[:500],
+        lines=reversal_lines,
+        reversal_of_id=original.id,
+    )
