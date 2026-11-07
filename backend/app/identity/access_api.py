@@ -140,6 +140,7 @@ def delete_role(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> None:
+    _lock_tenant(db, principal.tenant.id)
     role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id).with_for_update())
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
@@ -164,7 +165,7 @@ def replace_role_permissions(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> dict:
-    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id))
+    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id).with_for_update())
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     if role.is_system:
