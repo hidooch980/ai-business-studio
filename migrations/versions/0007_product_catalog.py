@@ -23,6 +23,8 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
         sa.Column("sku", sa.String(length=80), nullable=False),
         sa.Column("name", sa.String(length=200), nullable=False),
+        sa.CheckConstraint("length(trim(sku)) > 0", name="ck_products_sku_nonempty"),
+        sa.CheckConstraint("length(trim(name)) > 0", name="ck_products_name_nonempty"),
         sa.Column("description", sa.String(length=1000), nullable=True),
         sa.Column("unit_code", sa.String(length=20), nullable=False),
         sa.Column("barcode", sa.String(length=128), nullable=True),
