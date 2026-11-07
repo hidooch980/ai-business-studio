@@ -12,15 +12,23 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.app.catalog.models import Product
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
 from backend.app.identity.models import AuditEvent
 from backend.app.inventory.models import InventoryBalance, InventoryMovement, Warehouse
-from backend.app.catalog.models import Product
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
-WarehouseCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")]
+WarehouseCode = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=40,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+    ),
+]
 WarehouseName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
 Reference = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
 
