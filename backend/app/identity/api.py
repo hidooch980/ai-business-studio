@@ -25,6 +25,7 @@ from backend.app.identity.service import (
     is_login_locked,
     login_identifier_hash,
     login_ip_identifier_hash,
+    prune_login_rate_limits,
     record_login_failure,
     register_user,
     revoke_session,
@@ -138,6 +139,7 @@ def login(
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again later.")
     user = authenticate_user(db, email=payload.email, password=payload.password)
     if user is None:
+        prune_login_rate_limits(db)
         locked = record_login_failure(
             db,
             identifier_hash=identifier_hash,
