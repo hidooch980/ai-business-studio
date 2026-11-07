@@ -183,6 +183,30 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
                     },
                 )
 
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE financial_periods SET status = 'closed' WHERE tenant_id = :tenant"),
+                {"tenant": tenant_id},
+            )
+        with pytest.raises(DBAPIError, match="open accounting period"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO journal_entries "
+                        "(id, tenant_id, idempotency_key, request_hash, currency, posting_date, description, "
+                        "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
+                        "VALUES (:id, :tenant, 'pg-closed-period-direct', :hash, 'USD', '2026-01-01', "
+                        "'Closed period direct write', 100, 100, :user, :created_at)"
+                    ),
+                    {
+                        "id": uuid4(),
+                        "tenant": tenant_id,
+                        "hash": "2" * 64,
+                        "user": user_id,
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                )
+
         product_id = uuid4()
         warehouse_id = uuid4()
         movement_id = uuid4()
