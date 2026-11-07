@@ -10,6 +10,10 @@ from backend.app.identity.models import Membership, MembershipRole, Tenant, User
 from backend.app.identity.security import hash_password, hash_session_token, issue_session_token, verify_password
 
 
+class IdentityConflictError(ValueError):
+    """Raised when an identity resource conflicts with existing state."""
+
+
 def normalize_email(email: str) -> str:
     normalized = email.strip().casefold()
     if not normalized or "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
@@ -28,7 +32,7 @@ def register_user(
 ) -> tuple[User, Tenant, Membership]:
     normalized_email = normalize_email(email)
     if db.scalar(select(User.id).where(User.email == normalized_email)) is not None:
-        raise ValueError("An account with this email already exists")
+        raise IdentityConflictError("An account with this email already exists")
     tenant = Tenant(name=tenant_name.strip(), slug=tenant_slug.strip().casefold())
     user = User(
         email=normalized_email,
