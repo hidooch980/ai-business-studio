@@ -45,7 +45,8 @@ Status: **Journal foundation implemented; accounting domain incomplete**
 - [x] Idempotent creation and one-time compensating reversal.
 - [x] Append-only mutation guards and overposting protection for SQLite/PostgreSQL.
 - [x] Tenant-scoped chart-of-accounts catalog with typed accounts, same-type parent hierarchy, tenant-safe parent foreign keys and guarded deactivation.
-- [ ] Link journal lines to chart accounts and enforce account activity/type rules at posting time.
+- [x] Link journal lines to active tenant chart accounts with composite tenant foreign keys; serialize posting against concurrent account deactivation.
+- [ ] Enforce account-type/normal-balance policy at posting time.
 - [ ] Accounting periods, period close/reopen authorization, and locked periods.
 - [ ] Trial balance, general ledger, balance sheet, and profit/loss reports.
 - [ ] Reconciliation and adjustment workflows.
