@@ -16,6 +16,7 @@ def utc_now() -> datetime:
 class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_products_tenant_id_id"),
         UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),
         UniqueConstraint("tenant_id", "barcode", name="uq_products_tenant_barcode"),
         CheckConstraint("length(trim(sku)) > 0", name="ck_products_sku_nonempty"),
