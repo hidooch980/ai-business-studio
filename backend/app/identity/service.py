@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import case, delete, select
 from sqlalchemy.orm import Session
 
-from backend.app.identity.models import Membership, MembershipRole, Tenant, User, UserSession
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+from backend.app.identity.models import LoginRateLimit, Membership, MembershipRole, Tenant, User, UserSession
 from backend.app.identity.security import (
     hash_password,
     hash_session_token,
@@ -127,3 +132,78 @@ def create_csrf_token(db: Session, session: UserSession) -> str:
     session.csrf_token_hash = digest
     db.flush()
     return raw_token
+
+
+def login_identifier_hash(email: str, client_ip: str, secret: str) -> str:
+    normalized_email = email.strip().casefold()
+    material = f"{normalized_email}\0{client_ip}".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), material, hashlib.sha256).hexdigest()
+
+
+def is_login_locked(db: Session, identifier_hash: str) -> bool:
+    record = db.scalar(select(LoginRateLimit).where(LoginRateLimit.identifier_hash == identifier_hash))
+    if record is None or record.locked_until is None:
+        return False
+    locked_until = record.locked_until
+    if locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=UTC)
+    return locked_until > datetime.now(UTC)
+
+
+def record_login_failure(
+    db: Session,
+    *,
+    identifier_hash: str,
+    max_attempts: int = 8,
+    window_seconds: int = 300,
+    lock_seconds: int = 900,
+) -> bool:
+    if max_attempts < 1 or window_seconds < 1 or lock_seconds < 1:
+        raise ValueError("Rate-limit values must be positive")
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(seconds=window_seconds)
+    dialect = db.get_bind().dialect.name
+    if dialect == "sqlite":
+        insert_statement = sqlite_insert(LoginRateLimit)
+    elif dialect == "postgresql":
+        insert_statement = postgresql_insert(LoginRateLimit)
+    else:
+        raise RuntimeError("Login rate limiting requires SQLite or PostgreSQL")
+    statement = insert_statement.values(
+        id=uuid4(),
+        identifier_hash=identifier_hash,
+        window_started_at=now,
+        failed_attempts=1,
+        locked_until=None,
+        updated_at=now,
+    )
+    window_expired = LoginRateLimit.window_started_at < cutoff
+    next_attempts = case(
+        (window_expired, 1),
+        else_=LoginRateLimit.failed_attempts + 1,
+    )
+    next_locked_until = case(
+        (window_expired, None),
+        (LoginRateLimit.failed_attempts + 1 >= max_attempts, now + timedelta(seconds=lock_seconds)),
+        else_=LoginRateLimit.locked_until,
+    )
+    statement = statement.on_conflict_do_update(
+        index_elements=[LoginRateLimit.identifier_hash],
+        set_={
+            "window_started_at": case(
+                (window_expired, now),
+                else_=LoginRateLimit.window_started_at,
+            ),
+            "failed_attempts": next_attempts,
+            "locked_until": next_locked_until,
+            "updated_at": now,
+        },
+    )
+    db.execute(statement)
+    db.flush()
+    return is_login_locked(db, identifier_hash)
+
+
+def clear_login_failures(db: Session, identifier_hash: str) -> None:
+    db.execute(delete(LoginRateLimit).where(LoginRateLimit.identifier_hash == identifier_hash))
+    db.flush()
