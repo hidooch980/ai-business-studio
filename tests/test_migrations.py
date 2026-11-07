@@ -69,6 +69,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "warehouses",
             "inventory_balances",
             "inventory_movements",
+            "outbox_events",
             "financial_accounts",
         }.issubset(tables)
         assert "ck_journal_line_one_sided" in {
