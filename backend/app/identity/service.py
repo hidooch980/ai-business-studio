@@ -10,7 +10,8 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from backend.app.identity.models import LoginRateLimit, Membership, MembershipRole, Tenant, User, UserSession
+from backend.app.identity.models import LoginRateLimit, Membership, MembershipRole, Permission, Role, RolePermission, Tenant, User, UserSession
+from backend.app.identity.permissions import PERMISSION_CATALOG
 from backend.app.identity.security import (
     hash_password,
     hash_session_token,
@@ -53,6 +54,15 @@ def register_user(
     db.flush()
     membership = Membership(tenant_id=tenant.id, user_id=user.id)
     db.add(membership)
+    db.flush()
+    permissions = [Permission(code=code, description=description) for code, description in PERMISSION_CATALOG]
+    db.add_all(permissions)
+    db.flush()
+    owner_role = Role(tenant_id=tenant.id, name="owner", description="Tenant owner", is_system=True)
+    db.add(owner_role)
+    db.flush()
+    db.add_all([RolePermission(role_id=owner_role.id, permission_id=item.id) for item in permissions])
+    db.add(MembershipRole(tenant_id=tenant.id, membership_id=membership.id, role_id=owner_role.id))
     db.flush()
     return user, tenant, membership
 
