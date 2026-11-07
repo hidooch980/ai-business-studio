@@ -52,3 +52,5 @@ jobs:
           python -m pip install --upgrade pip "setuptools>=84.1.0"
           python -m pip install pip-audit
           pip-audit --skip-editable
+      - name: Build production container
+        run: docker build --tag ai-business-studio:ci .
