@@ -135,6 +135,20 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
             )
             connection.execute(
                 text(
+                    "INSERT INTO inventory_balances "
+                    "(id, tenant_id, warehouse_id, product_id, quantity_on_hand, updated_at) "
+                    "VALUES (:id, :tenant, :warehouse, :product, 0, :created_at)"
+                ),
+                {
+                    "id": uuid4(),
+                    "tenant": tenant_id,
+                    "warehouse": warehouse_id,
+                    "product": product_id,
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+            )
+            connection.execute(
+                text(
                     "INSERT INTO inventory_movements "
                     "(id, tenant_id, warehouse_id, product_id, movement_type, quantity_delta, "
                     "idempotency_key, request_hash, created_by_user_id, created_at) "
@@ -151,6 +165,17 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
                     "created_at": "2026-01-01T00:00:00+00:00",
                 },
             )
+        with engine.connect() as connection:
+            assert connection.execute(
+                text(
+                    "SELECT quantity_on_hand FROM inventory_balances "
+                    "WHERE warehouse_id = :warehouse AND product_id = :product"
+                ),
+                {"warehouse": warehouse_id, "product": product_id},
+            ).scalar_one() == 5
+        with pytest.raises(DBAPIError, match="inventory movements are append-only"):
+            with engine.begin() as connection:
+                connection.execute(text("TRUNCATE TABLE inventory_movements"))
         with pytest.raises(DBAPIError, match="inventory movements are append-only"):
             with engine.begin() as connection:
                 connection.execute(
