@@ -109,7 +109,10 @@ def create_invitation(
         TenantInvitation.revoked_at.is_(None),
     ))
     if pending is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A pending invitation already exists for this email; resend or revoke it")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A pending invitation already exists for this email; resend or revoke it",
+        )
     raw_token, token_hash = issue_session_token()
     invitation = TenantInvitation(
         tenant_id=principal.tenant.id,
