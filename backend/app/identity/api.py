@@ -39,7 +39,7 @@ def _set_session_cookie(response: Response, token: str, csrf_token: str) -> None
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite="lax",
-        path="/api/v1/auth",
+        path="/api/v1",
     )
     response.set_cookie(
         key=settings.csrf_cookie_name,
@@ -56,7 +56,7 @@ def _clear_session_cookie(response: Response) -> None:
     settings = get_settings()
     response.delete_cookie(
         key=settings.session_cookie_name,
-        path="/api/v1/auth",
+        path="/api/v1",
         secure=settings.session_cookie_secure,
         httponly=True,
         samesite="lax",
