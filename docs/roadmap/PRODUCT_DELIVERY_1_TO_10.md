@@ -116,10 +116,12 @@ Exit gate: accessibility, localization, browser/device, and offline recovery tes
 
 ## 9. Deployment and operations
 
-Status: **Not started**
+Status: **Container foundation implemented; operational controls remain**
 
-- [ ] Reproducible container build and non-root runtime.
-- [ ] Separate dev/staging/production configuration.
+- [x] Reproducible Dockerfile with non-root runtime and read-only app filesystem.
+- [x] PostgreSQL Compose service with separate non-superuser app and migration roles.
+- [x] CI validation of Compose configuration and container image build (pending latest run).
+- [ ] Separate dev/staging/production deployment environments.
 - [ ] TLS, secret manager, least-privilege database roles.
 - [ ] Structured logs, metrics, traces, health/readiness checks, and alerting.
 - [ ] Automated encrypted backups and tested restore rehearsal.
