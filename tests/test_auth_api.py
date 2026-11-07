@@ -13,7 +13,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
-from backend.app.identity.models import Membership, MembershipRole, Permission, Role, RolePermission, Tenant, TenantInvitation, User
+from backend.app.identity.models import JournalEntry, JournalLine, Membership, MembershipRole, Permission, Role, RolePermission, Tenant, TenantInvitation, User
 from backend.app.identity.security import hash_session_token
 from backend.app.identity.service import create_csrf_token, create_user_session
 from backend.app.main import create_app
@@ -724,3 +724,66 @@ def test_expired_invitation_can_be_replaced_and_old_token_is_invalidated(auth_cl
         old = db.get(TenantInvitation, invitation_id)
         assert old is not None and old.revoked_at is not None
         assert old.token_hash != hash_session_token(second.json()["invitation_token"])
+
+
+def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "finance-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Finance Owner",
+            "tenant_name": "Finance Studio",
+            "tenant_slug": "finance-studio",
+        },
+    )
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+        "Idempotency-Key": "invoice-2026-0001",
+    }
+    payload = {
+        "currency": "usd",
+        "description": "Invoice settlement",
+        "lines": [
+            {"account_code": "cash", "debit_minor": 12500, "credit_minor": 0},
+            {"account_code": "accounts-receivable", "debit_minor": 0, "credit_minor": 12500},
+        ],
+    }
+    created = auth_client.post("/api/v1/finance/journals", json=payload, headers=headers)
+    assert created.status_code == 201
+    assert created.json()["created"] is True
+    assert created.json()["currency"] == "USD"
+    assert len(created.json()["lines"]) == 2
+    replay = auth_client.post("/api/v1/finance/journals", json=payload, headers=headers)
+    assert replay.status_code == 201
+    assert replay.json()["created"] is False
+    assert replay.json()["id"] == created.json()["id"]
+    conflicting_replay = auth_client.post(
+        "/api/v1/finance/journals",
+        json={**payload, "description": "Different invoice"},
+        headers=headers,
+    )
+    assert conflicting_replay.status_code == 409
+    unbalanced = auth_client.post(
+        "/api/v1/finance/journals",
+        json={
+            **payload,
+            "lines": [
+                {"account_code": "cash", "debit_minor": 12500, "credit_minor": 0},
+                {"account_code": "income", "debit_minor": 0, "credit_minor": 12499},
+            ],
+        },
+        headers={**headers, "Idempotency-Key": "invoice-unbalanced"},
+    )
+    assert unbalanced.status_code == 422
+    listed = auth_client.get("/api/v1/finance/journals", headers={"X-Tenant-ID": tenant_id})
+    assert listed.status_code == 200
+    assert len(listed.json()["items"]) == 1
+    with Session(auth_client.app.state.test_engine) as db:
+        assert db.query(JournalEntry).count() == 1
+        assert db.query(JournalLine).count() == 2
+        entry = db.query(JournalEntry).one()
+        assert entry.tenant_id == UUID(tenant_id)
