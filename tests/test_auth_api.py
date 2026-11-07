@@ -1038,3 +1038,38 @@ def test_product_catalog_is_tenant_scoped_and_uses_soft_deactivation(auth_client
         headers={"X-Tenant-ID": tenant_id},
     )
     assert all_list.json()["items"][0]["is_active"] is False
+
+
+def test_invitation_rate_limit_includes_resends(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "invite-rate@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Invite Rate",
+            "tenant_name": "Invite Rate Studio",
+            "tenant_slug": "invite-rate-studio",
+        },
+    )
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+    }
+    role = auth_client.post("/api/v1/access/roles", json={"name": "invitee"}, headers=headers)
+    assert role.status_code == 201
+    created = auth_client.post(
+        "/api/v1/invitations",
+        json={"email": "rate-target@example.test", "display_name": "Rate Target", "role_id": role.json()["id"]},
+        headers=headers,
+    )
+    assert created.status_code == 201
+    invitation_id = created.json()["id"]
+
+    for _ in range(19):
+        resent = auth_client.post(f"/api/v1/invitations/{invitation_id}/resend", headers=headers)
+        assert resent.status_code == 200
+
+    blocked = auth_client.post(f"/api/v1/invitations/{invitation_id}/resend", headers=headers)
+    assert blocked.status_code == 429
