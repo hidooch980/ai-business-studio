@@ -17,7 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_unique_constraint("uq_products_tenant_id_id", "products", ["tenant_id", "id"])
+    op.create_index("uq_products_tenant_id_id", "products", ["tenant_id", "id"], unique=True)
 
     op.create_table(
         "warehouses",
@@ -229,4 +229,4 @@ def downgrade() -> None:
     op.drop_index("ix_inventory_balances_tenant_product", table_name="inventory_balances")
     op.drop_table("inventory_balances")
     op.drop_table("warehouses")
-    op.drop_constraint("uq_products_tenant_id_id", "products", type_="unique")
+    op.drop_index("uq_products_tenant_id_id", table_name="products")
