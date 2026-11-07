@@ -54,11 +54,15 @@ Exit gate: accounting invariants verified with accounting-domain fixtures and Po
 
 ## 4. ERP business modules
 
-Status: **Product catalog first slice implemented; remaining ERP modules not started**
+Status: **Product catalog and inventory ledger foundations implemented; ERP workflows remain**
 
 - [x] Tenant-scoped product catalog with SKU/barcode uniqueness, search, update, soft-deactivation, permission checks and audit events.
+- [x] Tenant-scoped warehouses and immutable receipt/issue/adjustment stock movements.
+- [x] Idempotent movement creation, non-negative stock guard, database-maintained balance projection and tenant-composite foreign keys.
+- [x] SQLite and PostgreSQL append-only movement triggers with integration coverage.
 - [ ] Product/service categories, unit conversion and barcode/QR workflows.
-- [ ] Warehouses, stock movements, batches, expiry, and stock valuation.
+- [ ] Product categories, unit conversion and barcode/QR workflows.
+- [ ] Batches, expiry, stock valuation and inventory reconciliation.
 - [ ] Purchase orders, goods receipt, supplier bills, and supplier balances.
 - [ ] Sales orders, invoices, returns, discounts, and customer balances.
 - [ ] POS workflows and cash drawer reconciliation.
