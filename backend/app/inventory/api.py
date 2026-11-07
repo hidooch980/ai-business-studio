@@ -17,6 +17,7 @@ from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
 from backend.app.identity.models import AuditEvent
 from backend.app.inventory.models import InventoryBalance, InventoryMovement, Warehouse
+from backend.app.outbox.service import enqueue_outbox_event
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -241,6 +242,22 @@ def create_inventory_movement(
     db.add(movement)
     try:
         db.flush()
+        enqueue_outbox_event(
+            db,
+            tenant_id=principal.tenant.id,
+            event_type="inventory.movement.created",
+            aggregate_type="inventory_movement",
+            aggregate_id=str(movement.id),
+            dedupe_key=f"inventory-movement:{movement.id}",
+            payload={
+                "movement_id": str(movement.id),
+                "warehouse_id": str(warehouse.id),
+                "product_id": str(product.id),
+                "movement_type": payload.movement_type,
+                "quantity_delta": delta,
+                "reference": payload.reference,
+            },
+        )
         _audit(db, principal, "inventory.movement_created", "inventory_movement", movement.id)
         db.commit()
     except IntegrityError as exc:
