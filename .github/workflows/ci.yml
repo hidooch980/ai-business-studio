@@ -61,7 +61,9 @@ jobs:
           DATABASE_URL: postgresql+psycopg://abs_app:ci-app-password@db:5432/ai_business_studio
           MIGRATION_DATABASE_URL: postgresql+psycopg://abs_migrator:ci-migrator-password@db:5432/ai_business_studio
         run: docker compose config --quiet
-      - name: Check shell script syntax
-        run: bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
+      - name: Check shell and systemd configuration syntax
+        run: |
+          bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
+          systemd-analyze verify deploy/systemd/ai-business-studio-backup.service deploy/systemd/ai-business-studio-backup.timer
       - name: Build production container
         run: docker build --tag ai-business-studio:ci .
