@@ -152,6 +152,46 @@ class LoginRateLimit(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
+class JournalEntry(Base):
+    __tablename__ = "journal_entries"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_journal_entries_tenant_id_id"),
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_journal_entries_tenant_idempotency"),
+        Index("ix_journal_entries_tenant_created", "tenant_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class JournalLine(Base):
+    __tablename__ = "journal_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "journal_entry_id"],
+            ["journal_entries.tenant_id", "journal_entries.id"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("journal_entry_id", "line_number", name="uq_journal_line_number"),
+        Index("ix_journal_lines_tenant_entry", "tenant_id", "journal_entry_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    journal_entry_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    account_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    memo: Mapped[str | None] = mapped_column(String(255))
+    debit_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    credit_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class TenantInvitation(Base):
     __tablename__ = "tenant_invitations"
     __table_args__ = (
