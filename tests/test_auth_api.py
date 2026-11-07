@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from backend.app.catalog.models import Product
 from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.db.session import get_db_session
@@ -935,3 +936,105 @@ def test_user_cannot_revoke_another_users_session(auth_client: TestClient) -> No
         headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
     )
     assert response.status_code == 404
+
+
+
+def test_product_catalog_is_tenant_scoped_and_uses_soft_deactivation(auth_client: TestClient) -> None:
+    payload = {
+        "email": "catalog-owner@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Catalog Owner",
+        "tenant_name": "Catalog Studio",
+        "tenant_slug": "catalog-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+    }
+    created = auth_client.post(
+        "/api/v1/catalog/products",
+        json={
+            "sku": "SKU-001",
+            "name": "Green Tea",
+            "description": "Organic green tea",
+            "unit_code": "box",
+            "barcode": "626000000001",
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201
+    product_id = created.json()["id"]
+    assert created.json()["tenant_id"] == tenant_id
+
+    duplicate = auth_client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "SKU-001", "name": "Duplicate SKU"},
+        headers=headers,
+    )
+    assert duplicate.status_code == 409
+
+    listed = auth_client.get("/api/v1/catalog/products", headers={"X-Tenant-ID": tenant_id})
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["items"]] == [product_id]
+    searched = auth_client.get(
+        "/api/v1/catalog/products",
+        params={"search": "626000000001"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert len(searched.json()["items"]) == 1
+
+    updated = auth_client.patch(
+        f"/api/v1/catalog/products/{product_id}",
+        json={"name": "Premium Green Tea", "description": None},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Premium Green Tea"
+    assert updated.json()["description"] is None
+
+    missing_field = auth_client.patch(
+        f"/api/v1/catalog/products/{product_id}",
+        json={},
+        headers=headers,
+    )
+    assert missing_field.status_code == 422
+    null_sku = auth_client.patch(
+        f"/api/v1/catalog/products/{product_id}",
+        json={"sku": None},
+        headers=headers,
+    )
+    assert null_sku.status_code == 422
+
+    other_tenant = Tenant(name="Other Catalog", slug="other-catalog")
+    with Session(auth_client.app.state.test_engine) as db:
+        db.add(other_tenant)
+        db.flush()
+        foreign_product = Product(
+            tenant_id=other_tenant.id,
+            sku="SKU-FOREIGN",
+            name="Foreign product",
+        )
+        db.add(foreign_product)
+        db.commit()
+        foreign_product_id = str(foreign_product.id)
+    foreign_update = auth_client.patch(
+        f"/api/v1/catalog/products/{foreign_product_id}",
+        json={"name": "Should not update"},
+        headers=headers,
+    )
+    assert foreign_update.status_code == 404
+    assert len(auth_client.get("/api/v1/catalog/products", headers={"X-Tenant-ID": tenant_id}).json()["items"]) == 1
+
+    deactivated = auth_client.delete(f"/api/v1/catalog/products/{product_id}", headers=headers)
+    assert deactivated.status_code == 204
+    active_list = auth_client.get("/api/v1/catalog/products", headers={"X-Tenant-ID": tenant_id})
+    assert active_list.json()["items"] == []
+    all_list = auth_client.get(
+        "/api/v1/catalog/products",
+        params={"active_only": "false"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert all_list.json()["items"][0]["is_active"] is False
