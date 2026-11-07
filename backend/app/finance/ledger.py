@@ -94,6 +94,8 @@ def create_journal_entry(
             FinancialAccount.code.in_({item["account_code"] for item in normalized_lines}),
             FinancialAccount.is_active.is_(True),
         )
+        .order_by(FinancialAccount.id)
+        .with_for_update()
     ).all()
     account_by_code = {account.code: account for account in accounts}
     missing_accounts = sorted({item["account_code"] for item in normalized_lines} - set(account_by_code))
