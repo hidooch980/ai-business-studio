@@ -15,6 +15,11 @@ def membership_has_permission(db: Session, membership: Membership, permission_co
         select(Permission.id)
         .select_from(MembershipRole)
         .join(
+            Membership,
+            (Membership.id == MembershipRole.membership_id)
+            & (Membership.tenant_id == MembershipRole.tenant_id),
+        )
+        .join(
             Role,
             (Role.id == MembershipRole.role_id)
             & (Role.tenant_id == MembershipRole.tenant_id),
@@ -30,9 +35,9 @@ def membership_has_permission(db: Session, membership: Membership, permission_co
         .where(
             MembershipRole.tenant_id == membership.tenant_id,
             MembershipRole.membership_id == membership.id,
+            Membership.is_active.is_(True),
             Role.tenant_id == membership.tenant_id,
             Permission.code == permission_code,
-            Membership.is_active.is_(True),
         )
         .limit(1)
     )
