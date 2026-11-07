@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, StringConstraints, model_validator
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -39,8 +39,11 @@ class ProductUpdateRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_at_least_one_field(self) -> "ProductUpdateRequest":
-        if all(getattr(self, field) is None for field in self.model_fields):
+        if not self.model_fields_set:
             raise ValueError("At least one product field must be supplied")
+        for field in ("sku", "name", "unit_code", "is_active"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
         return self
 
 
