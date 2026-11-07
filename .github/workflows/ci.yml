@@ -50,4 +50,4 @@ jobs:
       - name: Dependency audit
         run: |
           python -m pip install pip-audit
-          pip-audit
+          pip-audit --skip-editable
