@@ -70,6 +70,7 @@ Status: **Product catalog and inventory ledger foundations implemented; ERP work
 
 - [x] Tenant-scoped product catalog with SKU/barcode uniqueness, search, update, soft-deactivation, permission checks and audit events.
 - [x] Tenant-scoped warehouses and immutable receipt/issue/adjustment stock movements.
+- [x] Prevent product and warehouse deactivation while stock remains; serialize deactivation against concurrent inventory movements with row locks and regression tests.
 - [x] Idempotent movement creation, non-negative stock guard, database-maintained balance projection and tenant-composite foreign keys.
 - [x] SQLite and PostgreSQL append-only movement triggers with integration coverage.
 - [ ] Product/service categories, unit conversion and barcode/QR workflows.
