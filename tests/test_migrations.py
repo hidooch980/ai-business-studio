@@ -111,9 +111,18 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             )
             connection.execute(
                 text(
-                    "INSERT INTO journal_entries (id, tenant_id, idempotency_key, request_hash, currency, description, "
+                    "INSERT INTO financial_periods "
+                    "(id, tenant_id, name, start_date, end_date, status, created_by_user_id, created_at, updated_at) "
+                    "VALUES (:id, :tenant, 'FY-2026', '2026-01-01', '2026-12-31', 'open', :user, "
+                    "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+                ),
+                {"id": uuid4().hex, "tenant": tenant_id, "user": user_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO journal_entries (id, tenant_id, idempotency_key, request_hash, currency, posting_date, description, "
                     "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
-                    "VALUES (:id, :tenant, 'migration-ledger', :hash, 'USD', 'Migration test', 100, 100, :user, "
+                    "VALUES (:id, :tenant, 'migration-ledger', :hash, 'USD', '2026-01-01', 'Migration test', 100, 100, :user, "
                     "'2026-01-01 00:00:00')"
                 ),
                 {"id": entry_id, "tenant": tenant_id, "hash": "0" * 64, "user": user_id},
