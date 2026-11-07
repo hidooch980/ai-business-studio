@@ -28,7 +28,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     try:
         tables = set(inspect(engine).get_table_names())
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0008_inventory_ledger"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0009_financial_accounts"
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -69,6 +69,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "warehouses",
             "inventory_balances",
             "inventory_movements",
+            "financial_accounts",
         }.issubset(tables)
         assert "ck_journal_line_one_sided" in {
             item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
@@ -229,6 +230,36 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
                         "tenant": foreign_tenant_id,
                         "role": foreign_role_id,
                         "token": uuid4().hex * 2,
+                        "creator": user_id,
+                    },
+                )
+
+        account_id = uuid4().hex
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO financial_accounts "
+                    "(id, tenant_id, code, name, account_type, description, parent_account_id, "
+                    "is_active, created_by_user_id, created_at, updated_at) "
+                    "VALUES (:id, :tenant, '1000', 'Assets', 'asset', NULL, NULL, 1, :creator, "
+                    "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+                ),
+                {"id": account_id, "tenant": tenant_id, "creator": user_id},
+            )
+        with pytest.raises(DBAPIError):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO financial_accounts "
+                        "(id, tenant_id, code, name, account_type, description, parent_account_id, "
+                        "is_active, created_by_user_id, created_at, updated_at) "
+                        "VALUES (:id, :tenant, '1010', 'Foreign child', 'asset', NULL, :parent, 1, :creator, "
+                        "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+                    ),
+                    {
+                        "id": uuid4().hex,
+                        "tenant": foreign_tenant_id,
+                        "parent": account_id,
                         "creator": user_id,
                     },
                 )
