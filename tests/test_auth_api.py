@@ -16,7 +16,7 @@ from backend.app.identity.api_dependencies import (
     TenantPrincipal,
     require_permission,
 )
-from backend.app.identity.models import (
+from backend.app.identity.models import (\n    UserSession,
     JournalEntry,
     JournalLine,
     Membership,
@@ -860,3 +860,65 @@ def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestCl
         headers={**headers, "Idempotency-Key": "reverse-original-again"},
     )
     assert second_reversal.status_code == 409
+
+
+
+def test_user_can_list_and_revoke_only_their_own_sessions(auth_client: TestClient) -> None:
+    payload = {
+        "email": "sessions@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Session Owner",
+        "tenant_name": "Session Studio",
+        "tenant_slug": "session-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    assert registered.status_code == 201
+    first_session_id = None
+    with Session(auth_client.app.state.test_engine) as db:
+        first_session_id = str(db.query(UserSession).one().id)
+
+    second_login = auth_client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert second_login.status_code == 200
+    sessions = auth_client.get("/api/v1/auth/sessions")
+    assert sessions.status_code == 200
+    assert len(sessions.json()["items"]) == 2
+    assert sum(item["is_current"] for item in sessions.json()["items"]) == 1
+
+    revoke_old = auth_client.delete(f"/api/v1/auth/sessions/{first_session_id}")
+    assert revoke_old.status_code == 204
+    sessions_after = auth_client.get("/api/v1/auth/sessions")
+    old = next(item for item in sessions_after.json()["items"] if item["id"] == first_session_id)
+    assert old["revoked_at"] is not None
+    assert old["is_active"] is False
+
+    current_id = next(item["id"] for item in sessions_after.json()["items"] if item["is_current"])
+    revoke_current = auth_client.delete(f"/api/v1/auth/sessions/{current_id}")
+    assert revoke_current.status_code == 204
+    assert auth_client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_user_cannot_revoke_another_users_session(auth_client: TestClient) -> None:
+    payload = {
+        "email": "sessions-a@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Session A",
+        "tenant_name": "Session A Studio",
+        "tenant_slug": "session-a-studio",
+    }
+    assert auth_client.post("/api/v1/auth/register", json=payload).status_code == 201
+    with Session(auth_client.app.state.test_engine) as db:
+        foreign = User(
+            email="sessions-b@example.test",
+            password_hash="unused",
+            display_name="Session B",
+        )
+        db.add(foreign)
+        db.flush()
+        _raw, foreign_session = create_user_session(db, user=foreign)
+        db.commit()
+        foreign_session_id = str(foreign_session.id)
+    response = auth_client.delete(f"/api/v1/auth/sessions/{foreign_session_id}")
+    assert response.status_code == 404
