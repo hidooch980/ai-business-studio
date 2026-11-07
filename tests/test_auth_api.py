@@ -801,3 +801,62 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
         assert db.query(JournalLine).count() == 2
         entry = db.query(JournalEntry).one()
         assert entry.tenant_id == UUID(tenant_id)
+
+
+def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "reversal-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Reversal Owner",
+            "tenant_name": "Reversal Studio",
+            "tenant_slug": "reversal-studio",
+        },
+    )
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    headers = {
+        "X-Tenant-ID": tenant_id,
+        "X-CSRF-Token": auth_client.cookies.get("abs_csrf"),
+        "Idempotency-Key": "original-journal",
+    }
+    original = auth_client.post(
+        "/api/v1/finance/journals",
+        json={
+            "currency": "EUR",
+            "description": "Original sale",
+            "lines": [
+                {"account_code": "cash", "debit_minor": 8700},
+                {"account_code": "sales", "credit_minor": 8700},
+            ],
+        },
+        headers=headers,
+    )
+    assert original.status_code == 201
+    original_id = original.json()["id"]
+
+    reversed_entry = auth_client.post(
+        f"/api/v1/finance/journals/{original_id}/reverse",
+        headers={**headers, "Idempotency-Key": "reverse-original-journal"},
+    )
+    assert reversed_entry.status_code == 201
+    assert reversed_entry.json()["created"] is True
+    assert reversed_entry.json()["reversal_of_id"] == original_id
+    assert reversed_entry.json()["lines"][0]["debit_minor"] == 0
+    assert reversed_entry.json()["lines"][0]["credit_minor"] == 8700
+    assert reversed_entry.json()["lines"][1]["debit_minor"] == 8700
+    assert reversed_entry.json()["lines"][1]["credit_minor"] == 0
+
+    replay = auth_client.post(
+        f"/api/v1/finance/journals/{original_id}/reverse",
+        headers={**headers, "Idempotency-Key": "reverse-original-journal"},
+    )
+    assert replay.status_code == 201
+    assert replay.json()["created"] is False
+    assert replay.json()["id"] == reversed_entry.json()["id"]
+
+    second_reversal = auth_client.post(
+        f"/api/v1/finance/journals/{original_id}/reverse",
+        headers={**headers, "Idempotency-Key": "reverse-original-again"},
+    )
+    assert second_reversal.status_code == 409
