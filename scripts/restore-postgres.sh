@@ -23,6 +23,9 @@ mode="$(stat -c '%a' "$AGE_IDENTITY_FILE")"
 (( (8#$mode & 077) == 0 )) || { echo "AGE_IDENTITY_FILE must not be accessible by group/other" >&2; exit 1; }
 command -v age >/dev/null
 command -v pg_restore >/dev/null
+command -v sha256sum >/dev/null
+[[ -f "${BACKUP_FILE}.sha256" ]] || { echo "Backup checksum sidecar is missing" >&2; exit 1; }
+(cd "$(dirname "$BACKUP_FILE")" && sha256sum --check "$(basename "${BACKUP_FILE}.sha256")")
 
 echo "WARNING: restoring into database '$PGDATABASE' replaces conflicting objects."
 age --decrypt --identity "$AGE_IDENTITY_FILE" "$BACKUP_FILE" |
