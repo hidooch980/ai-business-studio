@@ -114,6 +114,67 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
                     {"id": entry_id},
                 )
 
+        foreign_tenant_id = uuid4()
+        foreign_account_id = uuid4()
+        foreign_entry_id = uuid4()
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO tenants (id, name, slug, is_active, created_at) "
+                    "VALUES (:id, 'Foreign account tenant', :slug, true, :created_at)"
+                ),
+                {
+                    "id": foreign_tenant_id,
+                    "slug": f"pg-foreign-account-{foreign_tenant_id.hex}",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO financial_accounts "
+                    "(id, tenant_id, code, name, account_type, is_active, created_by_user_id, created_at, updated_at) "
+                    "VALUES (:id, :tenant, 'FOREIGN', 'Foreign tenant account', 'asset', true, :user, :created_at, :created_at)"
+                ),
+                {
+                    "id": foreign_account_id,
+                    "tenant": foreign_tenant_id,
+                    "user": user_id,
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO journal_entries "
+                    "(id, tenant_id, idempotency_key, request_hash, currency, description, "
+                    "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
+                    "VALUES (:id, :tenant, 'pg-cross-tenant-account', :hash, 'USD', "
+                    "'Cross-tenant account FK test', 100, 100, :user, :created_at)"
+                ),
+                {
+                    "id": foreign_entry_id,
+                    "tenant": tenant_id,
+                    "hash": "1" * 64,
+                    "user": user_id,
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+            )
+        with pytest.raises(DBAPIError):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO journal_lines "
+                        "(id, tenant_id, journal_entry_id, line_number, account_code, financial_account_id, "
+                        "debit_minor, credit_minor) "
+                        "VALUES (:id, :tenant, :entry, 1, 'FOREIGN', :account, 100, 0)"
+                    ),
+                    {
+                        "id": uuid4(),
+                        "tenant": tenant_id,
+                        "entry": foreign_entry_id,
+                        "account": foreign_account_id,
+                    },
+                )
+
         product_id = uuid4()
         warehouse_id = uuid4()
         movement_id = uuid4()
