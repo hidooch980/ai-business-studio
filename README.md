@@ -35,6 +35,8 @@ Implemented in the foundation branch:
 - Initial identity schema for tenants, users, memberships, tenant roles, permissions, sessions, and audit events.
 - Argon2 password hashing and opaque session-token digest primitives.
 - Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
+- Database-enforced tenant consistency for membership-role assignments using composite foreign keys.
+- Case-insensitive unique email index enforced by the database.
 - Explicit initial Alembic revision (`0001_identity`) for the tenant and identity tables.
 - SQLite tests for identity models, authentication primitives, session lifecycle, tenant role assignment, and migration upgrade/downgrade.
 - SQLite database unit test and PostgreSQL connectivity integration smoke test.
@@ -42,7 +44,7 @@ Implemented in the foundation branch:
 
 Not implemented yet:
 - Production login/logout HTTP endpoints, secure session-cookie policy, CSRF protection, account recovery, MFA, and rate limiting. The current identity service functions are backend primitives, not a production authentication API.
-- Database-enforced cross-tenant role-assignment constraints. The current service rejects cross-tenant role assignments, but direct database writes are not yet protected by composite tenant foreign keys.
+
 - Tenant-scoped authorization across every business API, role/permission administration APIs, and immutable audit enforcement at the database layer.
 - Product, inventory, POS, procurement, CRM, ERP, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
 
