@@ -157,6 +157,7 @@ class AuditEvent(Base):
 
 class LoginRateLimit(Base):
     __tablename__ = "login_rate_limits"
+    __table_args__ = (Index("ix_login_rate_limits_updated_at", "updated_at"),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     identifier_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
