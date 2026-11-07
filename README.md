@@ -41,7 +41,8 @@ Implemented in the foundation branch:
 - Successful registration/login and denied login audit events; persistent, database-backed login throttling keyed by an HMAC of normalized email and client IP (default 8 failures per 5 minutes, 15-minute lock); production requires a unique `AUTH_RATE_LIMIT_SECRET` of at least 32 characters.
 - Database-enforced append-only audit events using SQLite and PostgreSQL triggers; migration tests verify that updates and deletes are rejected, and PostgreSQL additionally rejects table truncation. Production database roles must not own the schema or have DDL privileges.
 - SQLite identity tests and PostgreSQL integration smoke test.
-- CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service and strict pytest warnings.
+- CI matrix for Python 3.11/3.12 with PostgreSQL 16, strict pytest warnings, Ruff, dependency vulnerability audit, Compose validation, and a production Docker image build.
+- Container deployment foundation: non-root application image, read-only runtime filesystem, local-only port binding, PostgreSQL storage, and separate application/migration database roles. See [container deployment](docs/deployment/CONTAINER.md).
 
 Not implemented and still required before production use:
 - MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
