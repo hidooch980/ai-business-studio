@@ -22,7 +22,22 @@ class OutboxEvent(Base):
             name="ck_outbox_status",
         ),
         CheckConstraint("attempts >= 0", name="ck_outbox_attempts_nonnegative"),
+        CheckConstraint(
+            "(status = 'processing' AND locked_until IS NOT NULL AND locked_by IS NOT NULL AND lease_token IS NOT NULL) "
+            "OR (status <> 'processing' AND locked_until IS NULL AND locked_by IS NULL AND lease_token IS NULL)",
+            name="ck_outbox_lease_state",
+        ),
+        CheckConstraint(
+            "(status = 'delivered' AND delivered_at IS NOT NULL) OR "
+            "(status <> 'delivered' AND delivered_at IS NULL)",
+            name="ck_outbox_delivery_state",
+        ),
+        CheckConstraint("length(trim(event_type)) > 0", name="ck_outbox_event_type_nonempty"),
+        CheckConstraint("length(trim(aggregate_type)) > 0", name="ck_outbox_aggregate_type_nonempty"),
+        CheckConstraint("length(trim(aggregate_id)) > 0", name="ck_outbox_aggregate_id_nonempty"),
+        CheckConstraint("length(trim(dedupe_key)) > 0", name="ck_outbox_dedupe_key_nonempty"),
         Index("ix_outbox_ready", "status", "available_at", "created_at"),
+        Index("ix_outbox_processing_lease", "status", "locked_until"),
         Index("ix_outbox_tenant_created", "tenant_id", "created_at"),
     )
 
