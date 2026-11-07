@@ -103,7 +103,7 @@ def create_account(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active parent account not found")
         if parent.account_type != payload.account_type:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Parent and child accounts must have the same account type",
             )
     account = FinancialAccount(
