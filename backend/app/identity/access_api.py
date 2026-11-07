@@ -115,7 +115,7 @@ def update_role(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> dict:
-    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id))
+    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id).with_for_update())
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     if role.is_system:
@@ -189,14 +189,19 @@ def assign_membership_role(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> None:
+    _lock_tenant(db, principal.tenant.id)
     membership = db.scalar(select(Membership).where(
         Membership.id == membership_id,
         Membership.tenant_id == principal.tenant.id,
         Membership.is_active.is_(True),
-    ))
-    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id))
+    ).with_for_update())
+    role = db.scalar(select(Role).where(Role.id == role_id, Role.tenant_id == principal.tenant.id).with_for_update())
     if membership is None or role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership or role not found")
+    if role.is_system and (
+        role.name != "owner" or not _is_active_owner(db, principal.tenant.id, principal.membership.id)
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only an active owner can assign system roles")
     exists = db.scalar(select(MembershipRole.id).where(
         MembershipRole.tenant_id == principal.tenant.id,
         MembershipRole.membership_id == membership.id,
@@ -211,6 +216,21 @@ def assign_membership_role(
 
 def _lock_tenant(db: Session, tenant_id: UUID) -> None:
     db.scalar(select(Tenant.id).where(Tenant.id == tenant_id).with_for_update())
+
+
+def _is_active_owner(db: Session, tenant_id: UUID, membership_id: UUID) -> bool:
+    owner_assignment = db.scalar(
+        select(MembershipRole.id)
+        .join(Role, Role.id == MembershipRole.role_id)
+        .where(
+            MembershipRole.tenant_id == tenant_id,
+            MembershipRole.membership_id == membership_id,
+            Role.tenant_id == tenant_id,
+            Role.name == "owner",
+            Role.is_system.is_(True),
+        )
+    )
+    return owner_assignment is not None
 
 
 def _active_owner_count(db: Session, tenant_id: UUID, excluding_membership_id: UUID | None = None) -> int:
