@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from collections.abc import Callable
 from uuid import UUID
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from backend.app.outbox.models import OutboxEvent
 from backend.app.outbox.service import claim_outbox_events, mark_outbox_delivered, retry_outbox_event
 
 
