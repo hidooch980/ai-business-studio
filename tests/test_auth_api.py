@@ -850,7 +850,7 @@ def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestCl
         },
     )
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
-    _create_financial_account(auth_client, tenant_id, "cash", "asset")
+    cash_account = _create_financial_account(auth_client, tenant_id, "cash", "asset")
     _create_financial_account(auth_client, tenant_id, "sales", "income")
     headers = {
         "X-Tenant-ID": tenant_id,
@@ -871,6 +871,12 @@ def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestCl
     )
     assert original.status_code == 201
     original_id = original.json()["id"]
+    blocked_deactivation = auth_client.patch(
+        f"/api/v1/finance/accounts/{cash_account['id']}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert blocked_deactivation.status_code == 409
 
     reversed_entry = auth_client.post(
         f"/api/v1/finance/journals/{original_id}/reverse",
