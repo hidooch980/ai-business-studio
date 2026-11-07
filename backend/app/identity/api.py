@@ -109,9 +109,6 @@ def register(
     except IdentityConflictError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Registration could not be completed") from exc
-    except IdentityConflictError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Registration could not be completed") from exc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Registration could not be completed") from exc
