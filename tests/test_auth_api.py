@@ -27,6 +27,7 @@ def auth_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, 
 
     Base.metadata.create_all(engine)
     application = create_app()
+    application.state.test_engine = engine
 
     def override_db() -> Generator[Session, None, None]:
         with Session(engine, expire_on_commit=False) as db:
