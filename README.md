@@ -7,6 +7,7 @@ A modular, offline-capable retail management platform for single-store and multi
 General-purpose retail for grocery, apparel, electronics, home goods, mobile, parts and other retail categories.
 
 ### Applications
+- Secure OTP sign-in (phone primary, verified email alternate), role-scoped sessions and audit
 - Owner/admin web console
 - Branch manager application
 - Role-based employee application (cashier, sales, inventory and operations)
@@ -31,6 +32,7 @@ Manufacturing, industrial maintenance, fleet management, project management and 
 ## Product specifications
 - [Approved retail product scope](docs/RETAIL_PRODUCT_SCOPE.md)
 - [Loyalty and manager/employee/customer applications](docs/LOYALTY_AND_APPS_SPEC.md)
+- [OTP authentication and session security](docs/AUTH_OTP_SECURITY_SPEC.md)
 - [AI Decision Engine specification](docs/AI_DECISION_ENGINE_SPEC.md)
 - [AI retail product roadmap](docs/AI_AUTONOMOUS_RETAIL_ROADMAP.md)
 - [Reporting and BI specification](docs/REPORTING_AND_BI_SPEC.md)
