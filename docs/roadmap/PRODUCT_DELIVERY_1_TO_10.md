@@ -29,8 +29,10 @@ Status: **Foundation implemented; production security work remains**
 - [ ] MFA and account recovery.
 - [x] User-owned session listing and individual session revocation, including current-session revocation.
 - [ ] Device metadata/fingerprinting and centralized administrator session controls.
-- [ ] Invitation abuse controls and API-wide rate limiting.
-- [ ] PostgreSQL concurrency stress tests for owner/role/invitation operations.
+- [x] Per-tenant invitation create/resend limit (20 actions per rolling hour), serialized on the tenant row.
+- [ ] API-wide IP/account rate limiting and failed-invitation abuse controls.
+- [x] PostgreSQL concurrency regression test proves simultaneous deactivation cannot remove the last two active owners.
+- [ ] Additional PostgreSQL concurrency stress tests for role and invitation operations.
 - [ ] Independent security review and threat-model sign-off.
 
 Exit gate: negative authorization tests, race tests, MFA/recovery tests, and security review complete.
