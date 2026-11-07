@@ -2,11 +2,11 @@ import os
 import subprocess
 import sys
 from collections.abc import Generator
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from uuid import UUID
 
 from backend.app.core.config import get_settings
 from backend.app.db.session import build_engine, get_db_session
