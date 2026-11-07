@@ -51,9 +51,10 @@ def test_register_login_me_and_logout_cookie_flow(auth_client: TestClient) -> No
     assert len(registered.json()["memberships"]) == 1
     cookie = registered.cookies.get("abs_session")
     assert cookie
-    assert "HttpOnly" in registered.headers["set-cookie"]
-    assert "SameSite=lax" in registered.headers["set-cookie"]
-    assert "Secure" not in registered.headers["set-cookie"]
+    cookie_header = registered.headers["set-cookie"].casefold()
+    assert "httponly" in cookie_header
+    assert "samesite=lax" in cookie_header
+    assert "secure" not in cookie_header
 
     current = auth_client.get("/api/v1/auth/me")
     assert current.status_code == 200
