@@ -263,6 +263,30 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
     assert allowed.status_code == 200
     assert allowed.json()["tenant_id"] == tenant_id
 
+    with Session(auth_client.app.state.test_engine) as db:
+        membership = db.query(Membership).filter_by(tenant_id=UUID(tenant_id)).one()
+        membership.is_active = False
+        db.commit()
+
+    inactive_membership = auth_client.get(
+        "/api/v1/test/rbac-probe",
+        headers={**auth_headers, "X-Tenant-ID": tenant_id},
+    )
+    assert inactive_membership.status_code == 403
+
+    with Session(auth_client.app.state.test_engine) as db:
+        membership = db.query(Membership).filter_by(tenant_id=UUID(tenant_id)).one()
+        membership.is_active = True
+        tenant = db.query(Tenant).filter_by(id=UUID(tenant_id)).one()
+        tenant.is_active = False
+        db.commit()
+
+    inactive_tenant = auth_client.get(
+        "/api/v1/test/rbac-probe",
+        headers={**auth_headers, "X-Tenant-ID": tenant_id},
+    )
+    assert inactive_tenant.status_code == 403
+
 
 def test_unauthenticated_state_changes_require_origin(auth_client: TestClient) -> None:
     response = auth_client.post(
