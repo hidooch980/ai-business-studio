@@ -74,6 +74,8 @@ def run_outbox_batch(
                 if mark_outbox_delivered(db, event_id=message.id, lease_token=message.lease_token):
                     result["delivered"] += 1
             except Exception as exc:
+                # Never commit partial handler writes when delivery fails.
+                db.rollback()
                 if retry_outbox_event(
                     db,
                     event_id=message.id,
