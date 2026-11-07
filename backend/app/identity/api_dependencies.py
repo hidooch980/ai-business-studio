@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.identity.models import Membership, Tenant, User, UserSession
+from backend.app.identity.security import verify_csrf_token
 from backend.app.identity.service import get_active_session
 
 
@@ -56,3 +57,27 @@ def build_auth_context(db: Session, user: User) -> dict:
             for membership, tenant in rows
         ],
     }
+
+
+def require_csrf_protection(
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> None:
+    settings = get_settings()
+    session_token = request.cookies.get(settings.session_cookie_name)
+    if not session_token:
+        return
+    session = get_active_session(db, session_token)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+    if session.csrf_token_hash is None and request.url.path.endswith("/logout"):
+        return
+    cookie_token = request.cookies.get(settings.csrf_cookie_name)
+    header_token = request.headers.get("X-CSRF-Token")
+    if (
+        not cookie_token
+        or not header_token
+        or not __import__("hmac").compare_digest(cookie_token, header_token)
+        or not verify_csrf_token(header_token, session.csrf_token_hash)
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
