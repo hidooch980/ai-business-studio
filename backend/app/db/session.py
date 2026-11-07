@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from functools import lru_cache
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.core.config import get_settings
@@ -14,10 +14,20 @@ def build_engine(database_url: str) -> Engine:
     the supported shared database for multi-user and multi-branch deployments.
     """
     if database_url.startswith("sqlite"):
-        return create_engine(
+        engine = create_engine(
             database_url,
             connect_args={"check_same_thread": False},
         )
+
+        @event.listens_for(engine, "connect")
+        def _enable_sqlite_foreign_keys(connection, _record) -> None:
+            cursor = connection.cursor()
+            try:
+                cursor.execute("PRAGMA foreign_keys=ON")
+            finally:
+                cursor.close()
+
+        return engine
     return create_engine(
         database_url,
         pool_pre_ping=True,
