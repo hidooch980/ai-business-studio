@@ -12,6 +12,9 @@ Status: **In progress**
 - [x] Production configuration rejects missing/non-PostgreSQL databases and insecure session cookies.
 - [x] Dependency audit step added to CI.
 - [x] Verified CI run at `e8b52090e822c35517f1ee973c30ef701581ea97`: Python 3.11 and 3.12, Ruff, 47 tests, pip-audit, Compose validation, and Docker build all passed.
+- [x] Alembic metadata imports all catalog, identity, inventory, and outbox models so schema inspection sees the active domain metadata.
+- [x] SQLite and PostgreSQL migration chains include accounting periods and indexed login-throttle retention cleanup; current migration head is `0013_login_rate_limit_retention`.
+- [x] Verified CI run at `26b904b43bf1aa40ec7a5b865e5dca7da2833b2f`: Python 3.11/3.12, Ruff, tests, PostgreSQL 16 integration, dependency audit, Compose validation, shell/systemd checks, and Docker build all passed.
 - [ ] Upgrade rehearsal with representative existing data from the previous supported schema.
 
 Exit gate: all checks green on the same head SHA and both SQLite/PostgreSQL migration paths verified.
@@ -29,6 +32,8 @@ Status: **Foundation implemented; production security work remains**
 - [x] User-owned session listing and individual session revocation, including current-session revocation.
 - [ ] Device metadata/fingerprinting and centralized administrator session controls.
 - [x] Per-tenant invitation create/resend limit (20 actions per rolling hour), serialized on the tenant row.
+- [x] Login throttling by both account+IP and independent IP key to resist password spraying across multiple email addresses; regression tests cover lockout and ensure successful login cannot reset the shared IP counter.
+- [x] Expired login-throttle records are pruned after 30 days, with an indexed `updated_at` field and migration coverage.
 - [ ] API-wide IP/account rate limiting and failed-invitation abuse controls.
 - [x] PostgreSQL concurrency regression test proves simultaneous deactivation cannot remove the last two active owners.
 - [ ] Additional PostgreSQL concurrency stress tests for role and invitation operations.
