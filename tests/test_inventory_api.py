@@ -158,6 +158,62 @@ def test_inventory_receipt_issue_idempotency_and_nonnegative_stock(inventory_cli
         assert {item.event_type for item in outbox_events} == {"inventory.movement.created"}
 
 
+
+
+def test_product_cannot_be_deactivated_while_stock_remains(inventory_client: TestClient) -> None:
+    tenant_id, csrf = _register(inventory_client, "product-stock-owner@example.test", "product-stock-studio")
+    headers = _headers(inventory_client, tenant_id, csrf)
+    warehouse = inventory_client.post(
+        "/api/v1/inventory/warehouses",
+        json={"code": "STOCK", "name": "Stock warehouse"},
+        headers=headers,
+    )
+    product = inventory_client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "STOCK-ITEM", "name": "Stock item"},
+        headers=headers,
+    )
+    assert warehouse.status_code == 201
+    assert product.status_code == 201
+    receipt = inventory_client.post(
+        "/api/v1/inventory/movements",
+        json={
+            "warehouse_id": warehouse.json()["id"],
+            "product_id": product.json()["id"],
+            "movement_type": "receipt",
+            "quantity": 3,
+        },
+        headers={**headers, "Idempotency-Key": "stock-for-deactivation"},
+    )
+    assert receipt.status_code == 201, receipt.text
+    blocked_patch = inventory_client.patch(
+        f"/api/v1/catalog/products/{product.json()['id']}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert blocked_patch.status_code == 409
+    blocked_delete = inventory_client.delete(
+        f"/api/v1/catalog/products/{product.json()['id']}",
+        headers=headers,
+    )
+    assert blocked_delete.status_code == 409
+    issue = inventory_client.post(
+        "/api/v1/inventory/movements",
+        json={
+            "warehouse_id": warehouse.json()["id"],
+            "product_id": product.json()["id"],
+            "movement_type": "issue",
+            "quantity": 3,
+        },
+        headers={**headers, "Idempotency-Key": "clear-stock-for-deactivation"},
+    )
+    assert issue.status_code == 201, issue.text
+    deactivated = inventory_client.delete(
+        f"/api/v1/catalog/products/{product.json()['id']}",
+        headers=headers,
+    )
+    assert deactivated.status_code == 204
+
 def test_inventory_rejects_cross_tenant_warehouse_and_product(inventory_client: TestClient) -> None:
     first_tenant, first_csrf = _register(inventory_client, "first-owner@example.test", "first-stock")
     first_headers = _headers(inventory_client, first_tenant, first_csrf)
