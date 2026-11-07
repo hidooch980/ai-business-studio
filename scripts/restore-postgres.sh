@@ -21,6 +21,7 @@ mode="$(stat -c '%a' "$PGPASSFILE")"
 (( (8#$mode & 077) == 0 )) || { echo "PGPASSFILE must not be accessible by group/other" >&2; exit 1; }
 mode="$(stat -c '%a' "$AGE_IDENTITY_FILE")"
 (( (8#$mode & 077) == 0 )) || { echo "AGE_IDENTITY_FILE must not be accessible by group/other" >&2; exit 1; }
+[[ "$PGDATABASE" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Unsafe PGDATABASE name" >&2; exit 1; }
 command -v age >/dev/null
 command -v pg_restore >/dev/null
 command -v sha256sum >/dev/null
@@ -29,5 +30,5 @@ command -v sha256sum >/dev/null
 
 echo "WARNING: restoring into database '$PGDATABASE' replaces conflicting objects."
 age --decrypt --identity "$AGE_IDENTITY_FILE" "$BACKUP_FILE" |
-  pg_restore --exit-on-error --clean --if-exists --no-owner --no-acl --dbname="$PGDATABASE"
+  pg_restore --exit-on-error --single-transaction --clean --if-exists --no-owner --no-acl --dbname="$PGDATABASE"
 echo "Restore command completed for database '$PGDATABASE'. Verify application health and row counts."
