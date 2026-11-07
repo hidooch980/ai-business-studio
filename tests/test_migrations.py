@@ -25,9 +25,8 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     engine = create_engine(database_url)
     try:
         tables = set(inspect(engine).get_table_names())
-        assert "0004_audit_append_only" in {
-            row[0] for row in engine.connect().execute(text("SELECT version_num FROM alembic_version"))
-        }
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0004_audit_append_only"
         with engine.begin() as connection:
             connection.execute(
                 text(
