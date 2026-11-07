@@ -506,3 +506,109 @@ def test_membership_role_can_be_removed_without_affecting_other_tenants(auth_cli
     assert deleted_role.status_code == 204
     missing_role = auth_client.delete(f"/api/v1/access/roles/{role_id}", headers=headers)
     assert missing_role.status_code == 404
+
+
+def test_invitation_create_accept_is_one_time_and_tenant_scoped(auth_client: TestClient) -> None:
+    payload = {
+        "email": "invite-owner@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Invite Owner",
+        "tenant_name": "Invite Studio",
+        "tenant_slug": "invite-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    assert csrf_token
+    headers = {"X-Tenant-ID": tenant_id, "X-CSRF-Token": csrf_token}
+
+    role = auth_client.post(
+        "/api/v1/access/roles",
+        json={"name": "basic-member", "description": "Basic invited member"},
+        headers=headers,
+    )
+    assert role.status_code == 201
+    role_id = role.json()["id"]
+
+    created = auth_client.post(
+        "/api/v1/invitations",
+        json={"email": " New.Member@Example.test ", "display_name": "New Member", "role_id": role_id},
+        headers=headers,
+    )
+    assert created.status_code == 201
+    token = created.json()["invitation_token"]
+    assert created.json()["delivery"] == "manual"
+    assert created.json()["email"] == "new.member@example.test"
+
+    with Session(auth_client.app.state.test_engine) as db:
+        invitation = db.query(TenantInvitation).filter_by(email="new.member@example.test").one()
+        assert invitation.token_hash != token
+        assert invitation.token_hash == hash_session_token(token)
+
+    accepting_client = TestClient(auth_client.app)
+    accepting_client.headers.update({"Origin": str(accepting_client.base_url).rstrip("/")})
+    accepted = accepting_client.post(
+        "/api/v1/invitations/accept",
+        json={"token": token, "password": "a secure invited password", "display_name": "Accepted Member"},
+    )
+    assert accepted.status_code == 201
+    assert accepted.json()["email"] == "new.member@example.test"
+
+    replay = accepting_client.post(
+        "/api/v1/invitations/accept",
+        json={"token": token, "password": "another secure password"},
+    )
+    assert replay.status_code == 400
+
+    with Session(auth_client.app.state.test_engine) as db:
+        member = db.query(User).filter_by(email="new.member@example.test").one()
+        membership = db.query(Membership).filter_by(tenant_id=UUID(tenant_id), user_id=member.id).one()
+        assignment = db.query(MembershipRole).filter_by(
+            tenant_id=UUID(tenant_id), membership_id=membership.id, role_id=UUID(role_id)
+        ).one()
+        assert assignment is not None
+
+
+def test_invitation_resend_rotates_token_and_revoke_invalidates_it(auth_client: TestClient) -> None:
+    payload = {
+        "email": "invite-admin@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Invite Admin",
+        "tenant_name": "Invite Lifecycle Studio",
+        "tenant_slug": "invite-lifecycle-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    headers = {"X-Tenant-ID": tenant_id, "X-CSRF-Token": csrf_token}
+    role = auth_client.post("/api/v1/access/roles", json={"name": "invitee"}, headers=headers)
+    role_id = role.json()["id"]
+
+    created = auth_client.post(
+        "/api/v1/invitations",
+        json={"email": "rotate@example.test", "display_name": "Rotate", "role_id": role_id},
+        headers=headers,
+    )
+    invitation_id = created.json()["id"]
+    original_token = created.json()["invitation_token"]
+    resent = auth_client.post(f"/api/v1/invitations/{invitation_id}/resend", headers=headers)
+    assert resent.status_code == 200
+    replacement_token = resent.json()["invitation_token"]
+    assert replacement_token != original_token
+
+    accepting_client = TestClient(auth_client.app)
+    accepting_client.headers.update({"Origin": str(accepting_client.base_url).rstrip("/")})
+    old_token = accepting_client.post(
+        "/api/v1/invitations/accept",
+        json={"token": original_token, "password": "a secure invited password"},
+    )
+    assert old_token.status_code == 400
+
+    revoked = auth_client.delete(f"/api/v1/invitations/{invitation_id}", headers=headers)
+    assert revoked.status_code == 204
+    latest_token = accepting_client.post(
+        "/api/v1/invitations/accept",
+        json={"token": replacement_token, "password": "a secure invited password"},
+    )
+    assert latest_token.status_code == 400
