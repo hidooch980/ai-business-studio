@@ -68,7 +68,10 @@ def require_csrf_protection(
     settings = get_settings()
     source_origin = request.headers.get("origin") or request.headers.get("referer")
     if source_origin:
-        parsed_origin = urlsplit(source_origin)
+        try:
+            parsed_origin = urlsplit(source_origin)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Untrusted request origin") from exc
         request_host = request.headers.get("host", "").casefold()
         if (
             parsed_origin.scheme not in {"http", "https"}
