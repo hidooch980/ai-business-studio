@@ -7,7 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.identity.models import Membership, MembershipRole, Tenant, User, UserSession
-from backend.app.identity.security import hash_password, hash_session_token, issue_session_token, verify_password
+from backend.app.identity.security import (
+    hash_password,
+    hash_session_token,
+    issue_csrf_token,
+    issue_session_token,
+    verify_password,
+)
 
 
 class IdentityConflictError(ValueError):
@@ -114,3 +120,10 @@ def assign_role_to_membership(
     db.add(assignment)
     db.flush()
     return assignment
+
+
+def create_csrf_token(db: Session, session: UserSession) -> str:
+    raw_token, digest = issue_csrf_token()
+    session.csrf_token_hash = digest
+    db.flush()
+    return raw_token
