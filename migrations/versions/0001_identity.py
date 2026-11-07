@@ -112,6 +112,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("user_id", sa.Uuid(), nullable=False),
         sa.Column("token_hash", sa.String(length=64), nullable=False),
+        sa.Column("csrf_token_hash", sa.String(length=64), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -121,6 +122,18 @@ def upgrade() -> None:
     )
     op.create_index("ix_user_sessions_user_id", "user_sessions", ["user_id"])
     op.create_index("ix_user_sessions_expires_at", "user_sessions", ["expires_at"])
+
+    op.create_table(
+        "login_rate_limits",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("identifier_hash", sa.String(length=64), nullable=False),
+        sa.Column("window_started_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("failed_attempts", sa.Integer(), nullable=False),
+        sa.Column("locked_until", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("identifier_hash"),
+    )
 
     op.create_table(
         "audit_events",
@@ -147,6 +160,7 @@ def downgrade() -> None:
     op.drop_index("ix_audit_events_actor_user_id", table_name="audit_events")
     op.drop_index("ix_audit_events_tenant_id", table_name="audit_events")
     op.drop_table("audit_events")
+    op.drop_table("login_rate_limits")
     op.drop_index("ix_user_sessions_expires_at", table_name="user_sessions")
     op.drop_index("ix_user_sessions_user_id", table_name="user_sessions")
     op.drop_table("user_sessions")
