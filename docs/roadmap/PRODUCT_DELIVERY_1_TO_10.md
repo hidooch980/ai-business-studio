@@ -77,7 +77,13 @@ Status: **Product catalog and inventory ledger foundations implemented; ERP work
 - [ ] Batches, expiry, stock valuation and inventory reconciliation.
 - [ ] Purchase orders, goods receipt, supplier bills, and supplier balances.
 - [ ] Sales orders, invoices, returns, discounts, and customer balances.
-- [ ] POS workflows and cash drawer reconciliation.
+- [ ] Smart POS: cashier workspace, barcode/QR lookup, customer display, receipts, discounts/tax, suspended sales and role-aware overrides.
+- [ ] Cash/card-terminal/hosted-online payments, split tender, idempotent payment state machine, signed webhooks, refunds and reconciliation.
+- [ ] Cashier/register shifts, opening float, cash in/out, handover, close/count/variance and supervisor controls.
+- [ ] Sales fulfillment, stock reservation/release, returns, customer credit/loyalty, and atomic inventory/accounting/outbox posting.
+- [ ] Offline draft queue with idempotent synchronization, conflict resolution, encrypted device storage and explicit provisional status.
+- [ ] POS analytics, AI advisory insights, device adapters (scanner/printer/customer display/cash drawer), operational monitoring and release gates.
+- [ ] Implemented Smart POS scope and staged release gates documented in `docs/architecture/SMART_POS.md`; documentation is scope approval, not implementation evidence.
 - [ ] CRM, customer support, and loyalty.
 
 Exit gate: end-to-end purchase-to-stock and order-to-cash workflows with reconciliation tests.
