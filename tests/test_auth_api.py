@@ -14,6 +14,7 @@ from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
 from backend.app.identity.models import Membership, MembershipRole, Permission, Role, RolePermission, Tenant, TenantInvitation, User
 from backend.app.identity.security import hash_session_token
+from backend.app.identity.service import create_csrf_token, create_user_session
 from backend.app.main import create_app
 
 
@@ -628,3 +629,60 @@ def test_invitation_resend_rotates_token_and_revoke_invalidates_it(auth_client: 
         json={"token": replacement_token, "password": "a secure invited password"},
     )
     assert latest_token.status_code == 400
+
+
+def test_membership_manager_cannot_assign_system_owner_role(auth_client: TestClient) -> None:
+    registered = auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "security-owner@example.test",
+            "password": "correct horse battery staple",
+            "display_name": "Security Owner",
+            "tenant_name": "Role Escalation Studio",
+            "tenant_slug": "role-escalation-studio",
+        },
+    )
+    tenant_id = UUID(registered.json()["memberships"][0]["tenant_id"])
+    with Session(auth_client.app.state.test_engine, expire_on_commit=False) as db:
+        owner_membership = db.query(Membership).filter_by(tenant_id=tenant_id).one()
+        owner_role = db.query(Role).filter_by(tenant_id=tenant_id, name="owner", is_system=True).one()
+        manager_role = Role(tenant_id=tenant_id, name="membership-manager")
+        manager = User(
+            email="limited-manager@example.test",
+            password_hash="not-used-in-this-test",
+            display_name="Limited Manager",
+        )
+        target = User(
+            email="target-member@example.test",
+            password_hash="not-used-in-this-test",
+            display_name="Target Member",
+        )
+        db.add_all([manager_role, manager, target])
+        db.flush()
+        manager_membership = Membership(tenant_id=tenant_id, user_id=manager.id)
+        target_membership = Membership(tenant_id=tenant_id, user_id=target.id)
+        db.add_all([manager_membership, target_membership])
+        db.flush()
+        permission = db.query(Permission).filter_by(code="access.memberships.manage").one()
+        db.add_all([
+            RolePermission(role_id=manager_role.id, permission_id=permission.id),
+            MembershipRole(tenant_id=tenant_id, membership_id=manager_membership.id, role_id=manager_role.id),
+        ])
+        token, session = create_user_session(db, user=manager)
+        csrf = create_csrf_token(db, session)
+        db.commit()
+        target_membership_id = target_membership.id
+        owner_role_id = owner_role.id
+        assert owner_membership.id != manager_membership.id
+
+    manager_client = TestClient(auth_client.app)
+    manager_client.headers.update({"Origin": str(manager_client.base_url).rstrip("/")})
+    response = manager_client.put(
+        f"/api/v1/access/memberships/{target_membership_id}/roles/{owner_role_id}",
+        headers={
+            "Cookie": f"abs_session={token}; abs_csrf={csrf}",
+            "X-CSRF-Token": csrf,
+            "X-Tenant-ID": str(tenant_id),
+        },
+    )
+    assert response.status_code == 403
