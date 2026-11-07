@@ -26,7 +26,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     try:
         tables = set(inspect(engine).get_table_names())
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0004_audit_append_only"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0005_tenant_invitations"
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -59,6 +59,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "user_sessions",
             "audit_events",
             "login_rate_limits",
+            "tenant_invitations",
         }.issubset(tables)
     finally:
         engine.dispose()
