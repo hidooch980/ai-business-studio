@@ -26,7 +26,8 @@ Status: **Foundation implemented; production security work remains**
 - [x] Tenant-scoped RBAC, invitation lifecycle, owner safeguards, and append-only audit triggers.
 - [x] Cross-tenant authorization regression coverage.
 - [ ] MFA and account recovery.
-- [ ] User-visible session/device management and global session revocation.
+- [x] User-owned session listing and individual session revocation, including current-session revocation.
+- [ ] Device metadata/fingerprinting and centralized administrator session controls.
 - [ ] Invitation abuse controls and API-wide rate limiting.
 - [ ] PostgreSQL concurrency stress tests for owner/role/invitation operations.
 - [ ] Independent security review and threat-model sign-off.
