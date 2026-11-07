@@ -4,13 +4,14 @@
 
 - Docker Engine and Docker Compose plugin.
 - A protected deployment environment for `.env`; never commit the real file.
+- Separate `abs_app` and `abs_migrator` credentials; the container entrypoint creates both as non-superuser roles.
 - A TLS reverse proxy in front of the app. The Compose port binds only to `127.0.0.1`.
 
 ## First deployment
 
 1. Copy `.env.example` to `.env`.
 2. Replace `POSTGRES_PASSWORD` and `AUTH_RATE_LIMIT_SECRET` with independent random secrets. Use at least 32 random characters for `AUTH_RATE_LIMIT_SECRET`.
-3. Ensure `DATABASE_URL` uses `postgresql+psycopg://` and matches the database name, user, and password. URL-encode reserved characters in the password.
+3. Set `DATABASE_URL` to the `abs_app` role and `MIGRATION_DATABASE_URL` to the `abs_migrator` role. Both must use `postgresql+psycopg://` and match the database name and passwords. URL-encode reserved characters in passwords.
 4. Build and apply the reviewed schema migration:
 
    ```bash
