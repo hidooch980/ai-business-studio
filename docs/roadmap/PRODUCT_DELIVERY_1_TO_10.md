@@ -134,7 +134,8 @@ Status: **Container foundation implemented; operational controls remain**
 - [x] Separate non-superuser runtime/migration database roles and local-only app port binding.
 - [ ] TLS termination and external secret manager.
 - [ ] Structured logs, metrics, traces, health/readiness checks, and alerting.
-- [ ] Automated encrypted backups and tested restore rehearsal.
+- [x] Encrypted PostgreSQL backup and guarded restore scripts with checksum/permission checks and documented recovery steps.
+- [ ] Scheduled off-host backup execution, monitoring/alerting, and verified restore rehearsal.
 - [ ] Capacity/load tests, migration runbook, rollback and incident response.
 
 Exit gate: staging deployment, restore rehearsal, load test, and incident drill signed off.
