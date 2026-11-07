@@ -63,13 +63,11 @@ Status: **Product catalog and inventory ledger foundations implemented; ERP work
 - [x] Idempotent movement creation, non-negative stock guard, database-maintained balance projection and tenant-composite foreign keys.
 - [x] SQLite and PostgreSQL append-only movement triggers with integration coverage.
 - [ ] Product/service categories, unit conversion and barcode/QR workflows.
-- [ ] Product categories, unit conversion and barcode/QR workflows.
 - [ ] Batches, expiry, stock valuation and inventory reconciliation.
 - [ ] Purchase orders, goods receipt, supplier bills, and supplier balances.
 - [ ] Sales orders, invoices, returns, discounts, and customer balances.
 - [ ] POS workflows and cash drawer reconciliation.
 - [ ] CRM, customer support, and loyalty.
-- [ ] Tenant isolation and immutable inventory movement ledger.
 
 Exit gate: end-to-end purchase-to-stock and order-to-cash workflows with reconciliation tests.
 
