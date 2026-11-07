@@ -61,7 +61,7 @@ def create_journal_entry(
     debit_total = 0
     credit_total = 0
     for item in normalized_lines:
-        if not item["account_code"] or len(item["account_code"]) > 64:
+        if not item["account_code"] or len(item["account_code"]) > 32:
             raise ValueError("Every line requires an account code of at most 64 characters")
         if item["memo"] is not None and len(item["memo"]) > 255:
             raise ValueError("Line memo must not exceed 255 characters")
