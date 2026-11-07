@@ -35,10 +35,17 @@ class Settings:
 @lru_cache
 def get_settings() -> Settings:
     database_url = os.getenv("DATABASE_URL")
+    database_url = database_url.strip() if database_url and database_url.strip() else None
+    app_env = os.getenv("APP_ENV", "development")
+    secure_cookie = _env_bool("SESSION_COOKIE_SECURE", True)
+    if app_env.casefold() == "production":
+        if not database_url or not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+            raise ValueError("Production requires a PostgreSQL DATABASE_URL")
+        if not secure_cookie:
+            raise ValueError("SESSION_COOKIE_SECURE must be true in production")
     lifetime = int(os.getenv("SESSION_LIFETIME_SECONDS", "43200"))
     if not 300 <= lifetime <= 2592000:
         raise ValueError("SESSION_LIFETIME_SECONDS must be between 300 and 2592000")
-    app_env = os.getenv("APP_ENV", "development")
     rate_limit_secret = os.getenv("AUTH_RATE_LIMIT_SECRET", "development-only-change-me")
     if app_env.casefold() == "production" and (
         len(rate_limit_secret) < 32
@@ -55,10 +62,10 @@ def get_settings() -> Settings:
         app_name=os.getenv("APP_NAME", "AI Business Studio"),
         app_env=app_env,
         log_level=os.getenv("LOG_LEVEL", "INFO"),
-        database_url=database_url.strip() if database_url and database_url.strip() else None,
+        database_url=database_url,
         session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "abs_session"),
         csrf_cookie_name=os.getenv("CSRF_COOKIE_NAME", "abs_csrf"),
-        session_cookie_secure=_env_bool("SESSION_COOKIE_SECURE", True),
+        session_cookie_secure=secure_cookie,
         session_lifetime_seconds=lifetime,
         allow_public_registration=_env_bool("ALLOW_PUBLIC_REGISTRATION", False),
         auth_rate_limit_secret=rate_limit_secret,
