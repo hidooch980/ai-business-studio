@@ -92,6 +92,8 @@ def create_journal_entry(
         request_hash=digest,
         currency=payload["currency"],
         description=payload["description"],
+        debit_total_minor=debit_total,
+        credit_total_minor=credit_total,
         created_by_user_id=actor_user_id,
     )
     db.add(entry)
