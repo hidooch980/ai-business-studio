@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, ForeignKeyConstraint, Index, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -29,7 +29,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(160), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -39,9 +39,15 @@ class User(Base):
     memberships: Mapped[list[Membership]] = relationship(back_populates="user")
 
 
+Index("uq_users_email_lower", func.lower(User.email), unique=True)
+
+
 class Membership(Base):
     __tablename__ = "memberships"
-    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_membership_tenant_user"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_membership_tenant_user"),
+        UniqueConstraint("tenant_id", "id", name="uq_membership_tenant_id_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
@@ -56,7 +62,10 @@ class Membership(Base):
 
 class Role(Base):
     __tablename__ = "roles"
-    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_role_tenant_name"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_role_tenant_name"),
+        UniqueConstraint("tenant_id", "id", name="uq_role_tenant_id_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
@@ -84,11 +93,24 @@ class RolePermission(Base):
 
 class MembershipRole(Base):
     __tablename__ = "membership_roles"
-    __table_args__ = (UniqueConstraint("membership_id", "role_id", name="uq_membership_role"),)
+    __table_args__ = (
+        UniqueConstraint("membership_id", "role_id", name="uq_membership_role"),
+        ForeignKeyConstraint(
+            ["tenant_id", "membership_id"],
+            ["memberships.tenant_id", "memberships.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "role_id"],
+            ["roles.tenant_id", "roles.id"],
+            ondelete="RESTRICT",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    membership_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("memberships.id", ondelete="CASCADE"), nullable=False, index=True)
-    role_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    role_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
 
     membership: Mapped[Membership] = relationship(back_populates="roles")
 
