@@ -67,6 +67,48 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         assert "ck_journal_line_one_sided" in {
             item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
         }
+        tenant_id = uuid4().hex
+        user_id = uuid4().hex
+        entry_id = uuid4().hex
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO tenants (id, name, slug, is_active, created_at) VALUES (:id, 'Ledger test', 'ledger-test', 1, '2026-01-01 00:00:00')"),
+                {"id": tenant_id},
+            )
+            connection.execute(
+                text("INSERT INTO users (id, email, password_hash, display_name, is_active, is_platform_admin, created_at) VALUES (:id, 'ledger@example.test', 'hash', 'Ledger', 1, 0, '2026-01-01 00:00:00')"),
+                {"id": user_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO journal_entries (id, tenant_id, idempotency_key, request_hash, currency, description, debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
+                    "VALUES (:id, :tenant, 'migration-ledger', :hash, 'USD', 'Migration test', 100, 100, :user, '2026-01-01 00:00:00')"
+                ),
+                {"id": entry_id, "tenant": tenant_id, "hash": "0" * 64, "user": user_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO journal_lines (id, tenant_id, journal_entry_id, line_number, account_code, debit_minor, credit_minor) "
+                    "VALUES (:id, :tenant, :entry, 1, 'cash', 100, 0)"
+                ),
+                {"id": uuid4().hex, "tenant": tenant_id, "entry": entry_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO journal_lines (id, tenant_id, journal_entry_id, line_number, account_code, debit_minor, credit_minor) "
+                    "VALUES (:id, :tenant, :entry, 2, 'income', 0, 100)"
+                ),
+                {"id": uuid4().hex, "tenant": tenant_id, "entry": entry_id},
+            )
+        with pytest.raises(DBAPIError, match="totals cannot be exceeded"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO journal_lines (id, tenant_id, journal_entry_id, line_number, account_code, debit_minor, credit_minor) "
+                        "VALUES (:id, :tenant, :entry, 3, 'cash', 1, 0)"
+                    ),
+                    {"id": uuid4().hex, "tenant": tenant_id, "entry": entry_id},
+                )
     finally:
         engine.dispose()
 
