@@ -138,3 +138,35 @@ def test_database_enforces_case_insensitive_email_uniqueness() -> None:
             db.rollback()
     finally:
         engine.dispose()
+
+
+def test_login_rate_limit_pruning_removes_expired_hashed_identifiers() -> None:
+    from datetime import UTC, datetime
+
+    from backend.app.identity.models import LoginRateLimit
+    from backend.app.identity.service import prune_login_rate_limits
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            old = LoginRateLimit(
+                identifier_hash="a" * 64,
+                window_started_at=datetime.now(UTC) - timedelta(days=31),
+                failed_attempts=4,
+                updated_at=datetime.now(UTC) - timedelta(days=31),
+            )
+            recent = LoginRateLimit(
+                identifier_hash="b" * 64,
+                window_started_at=datetime.now(UTC),
+                failed_attempts=2,
+                updated_at=datetime.now(UTC),
+            )
+            db.add_all([old, recent])
+            db.commit()
+            assert prune_login_rate_limits(db) == 1
+            db.commit()
+            assert db.query(LoginRateLimit).count() == 1
+            assert db.query(LoginRateLimit).one().identifier_hash == "b" * 64
+    finally:
+        engine.dispose()
