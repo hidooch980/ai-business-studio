@@ -3,13 +3,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ai_business_studio}
-      POSTGRES_USER: ${POSTGRES_USER:-abs_app}
+      POSTGRES_DB: ai_business_studio
+      POSTGRES_USER: abs_app
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the deployment environment}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U abs_app -d ai_business_studio"]
       interval: 5s
       timeout: 5s
       retries: 12
