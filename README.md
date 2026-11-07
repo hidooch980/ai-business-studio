@@ -46,9 +46,11 @@ A first responsive React + TypeScript + Vite UI prototype lives in `frontend/`.
 - OTP entry screen clearly marked as not connected to a delivery/API provider.
 - Role-oriented admin dashboard shell with explicitly labelled sample data.
 - Responsive desktop/mobile layouts and RTL-first Persian UI.
+- Four role-specific workspace previews: owner/admin, branch manager, employee and customer.
+- Local preview tools for role-filtered search, sample notifications, approval review markers and dashboard widget visibility.
 - Frontend CI type-checks and builds the Vite app.
 
-This is an initial UI foundation, not a production-ready application: authentication, backend APIs, live data, payment flows, and role authorization still require implementation and integration.
+The role workspace tools are local UI demonstrations only. Search uses a static index; notification and approval state is in-memory; dashboard preferences are not persisted. Authentication, backend APIs, live data, payment flows, durable approvals/notifications, user preferences and server-side role authorization still require implementation and integration. See [role permission matrix and workspace UX contract](docs/ROLE_PERMISSION_MATRIX.md).
 
 ## UX/UI design foundation
 
