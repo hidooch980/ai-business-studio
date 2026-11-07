@@ -881,6 +881,7 @@ def test_user_can_list_and_revoke_only_their_own_sessions(auth_client: TestClien
     second_login = auth_client.post(
         "/api/v1/auth/login",
         json={"email": payload["email"], "password": payload["password"]},
+        headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
     )
     assert second_login.status_code == 200
     sessions = auth_client.get("/api/v1/auth/sessions")
