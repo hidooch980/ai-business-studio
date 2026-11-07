@@ -50,7 +50,8 @@ Status: **Journal foundation implemented; accounting domain incomplete**
 - [x] Tenant-scoped accounting periods with overlap prevention, immutable close state, audit events, and open-period posting enforcement.
 - [ ] Authorized period reopening workflow (controlled adjustment only) and period-end closing checklist.
 - [x] Tenant-scoped trial balance by currency and posting date, with debit/credit totals and unmapped-line detection.
-- [ ] General ledger, balance sheet, and profit/loss reports.
+- [x] Tenant-scoped general ledger with date range, currency filter, opening/closing balances, and running balances.
+- [ ] Balance sheet and profit/loss reports.
 - [ ] Reconciliation and adjustment workflows.
 - [ ] Multi-currency FX source, conversion, and rounding policy.
 - [ ] Tax rules and audit-ready exports.
