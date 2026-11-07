@@ -41,6 +41,16 @@ def upgrade() -> None:
                 """
             )
         )
+        op.execute(
+            sa.text(
+                """
+                CREATE TRIGGER audit_events_no_truncate
+                BEFORE TRUNCATE ON audit_events
+                FOR EACH STATEMENT
+                EXECUTE FUNCTION prevent_audit_event_mutation()
+                """
+            )
+        )
     elif dialect == "sqlite":
         op.execute(
             sa.text(
@@ -71,6 +81,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     dialect = op.get_bind().dialect.name
     if dialect == "postgresql":
+        op.execute(sa.text("DROP TRIGGER IF EXISTS audit_events_no_truncate ON audit_events"))
         op.execute(sa.text("DROP TRIGGER IF EXISTS audit_events_no_update_delete ON audit_events"))
         op.execute(sa.text("DROP FUNCTION IF EXISTS prevent_audit_event_mutation()"))
     elif dialect == "sqlite":
