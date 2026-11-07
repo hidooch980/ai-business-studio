@@ -37,9 +37,8 @@ def upgrade() -> None:
         sa.Column("is_platform_admin", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("email"),
     )
-    op.create_index("ix_users_email", "users", ["email"], unique=True)
+    op.create_index("uq_users_email_lower", "users", [sa.text("lower(email)")], unique=True)
 
     op.create_table(
         "permissions",
@@ -61,6 +60,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "user_id", name="uq_membership_tenant_user"),
+        sa.UniqueConstraint("tenant_id", "id", name="uq_membership_tenant_id_id"),
     )
     op.create_index("ix_memberships_tenant_id", "memberships", ["tenant_id"])
     op.create_index("ix_memberships_user_id", "memberships", ["user_id"])
@@ -75,6 +75,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "name", name="uq_role_tenant_name"),
+        sa.UniqueConstraint("tenant_id", "id", name="uq_role_tenant_id_id"),
     )
     op.create_index("ix_roles_tenant_id", "roles", ["tenant_id"])
 
@@ -94,13 +95,15 @@ def upgrade() -> None:
     op.create_table(
         "membership_roles",
         sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("tenant_id", sa.Uuid(), nullable=False),
         sa.Column("membership_id", sa.Uuid(), nullable=False),
         sa.Column("role_id", sa.Uuid(), nullable=False),
-        sa.ForeignKeyConstraint(["membership_id"], ["memberships.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["role_id"], ["roles.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["tenant_id", "membership_id"], ["memberships.tenant_id", "memberships.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["tenant_id", "role_id"], ["roles.tenant_id", "roles.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("membership_id", "role_id", name="uq_membership_role"),
     )
+    op.create_index("ix_membership_roles_tenant_id", "membership_roles", ["tenant_id"])
     op.create_index("ix_membership_roles_membership_id", "membership_roles", ["membership_id"])
     op.create_index("ix_membership_roles_role_id", "membership_roles", ["role_id"])
 
@@ -148,6 +151,7 @@ def downgrade() -> None:
     op.drop_index("ix_user_sessions_user_id", table_name="user_sessions")
     op.drop_table("user_sessions")
     op.drop_index("ix_membership_roles_role_id", table_name="membership_roles")
+    op.drop_index("ix_membership_roles_tenant_id", table_name="membership_roles")
     op.drop_index("ix_membership_roles_membership_id", table_name="membership_roles")
     op.drop_table("membership_roles")
     op.drop_index("ix_role_permissions_permission_id", table_name="role_permissions")
@@ -159,7 +163,7 @@ def downgrade() -> None:
     op.drop_index("ix_memberships_tenant_id", table_name="memberships")
     op.drop_table("memberships")
     op.drop_table("permissions")
-    op.drop_index("ix_users_email", table_name="users")
+    op.drop_index("uq_users_email_lower", table_name="users")
     op.drop_table("users")
     op.drop_index("ix_tenants_slug", table_name="tenants")
     op.drop_table("tenants")
