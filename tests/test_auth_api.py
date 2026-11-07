@@ -10,9 +10,9 @@ from sqlalchemy.pool import StaticPool
 from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.db.session import get_db_session
-from backend.app.main import create_app
 from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
 from backend.app.identity.models import Membership, MembershipRole, Permission, Role, RolePermission, Tenant
+from backend.app.main import create_app
 
 
 @pytest.fixture
