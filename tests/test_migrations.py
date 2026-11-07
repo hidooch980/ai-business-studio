@@ -1,8 +1,11 @@
 import os
 import subprocess
 import sys
+from uuid import uuid4
 
-from sqlalchemy import create_engine, inspect
+import pytest
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import DBAPIError
 
 
 def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
@@ -22,6 +25,28 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     engine = create_engine(database_url)
     try:
         tables = set(inspect(engine).get_table_names())
+        assert "0004_audit_append_only" in {
+            row[0] for row in engine.connect().execute(text("SELECT version_num FROM alembic_version"))
+        }
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events
+                    (id, tenant_id, actor_user_id, action, resource_type, resource_id, outcome, request_id, created_at)
+                    VALUES (:id, NULL, NULL, 'test.created', 'test', '1', 'success', NULL, '2026-01-01 00:00:00')
+                    """
+                ),
+                {"id": uuid4().hex},
+            )
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE audit_events SET outcome = 'tampered'"))
+        with pytest.raises(DBAPIError, match="append-only"):
+            with engine.begin() as connection:
+                connection.execute(text("DELETE FROM audit_events"))
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT count(*) FROM audit_events")).scalar_one() == 1
         assert "csrf_token_hash" in {column["name"] for column in inspect(engine).get_columns("user_sessions")}
         assert {
             "alembic_version",
