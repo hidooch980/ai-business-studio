@@ -16,7 +16,8 @@ from backend.app.identity.api_dependencies import (
     TenantPrincipal,
     require_permission,
 )
-from backend.app.identity.models import (\n    UserSession,
+from backend.app.identity.models import (
+    UserSession,
     JournalEntry,
     JournalLine,
     Membership,
