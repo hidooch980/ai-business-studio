@@ -32,7 +32,10 @@ destination="${BACKUP_DIR}/${base}.age"
 [[ ! -e "$destination" ]] || { echo "Backup destination already exists" >&2; exit 1; }
 mv "$encrypted_tmp" "$destination"
 chmod 600 "$destination"
-sha256sum "$destination" > "${destination}.sha256"
+(
+  cd "$BACKUP_DIR"
+  sha256sum "${base}.age" > "${base}.age.sha256"
+)
 chmod 600 "${destination}.sha256"
 printf 'Encrypted backup created: %s\n' "$destination"
 
