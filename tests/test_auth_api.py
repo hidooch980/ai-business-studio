@@ -301,3 +301,80 @@ def test_unauthenticated_state_changes_require_origin(auth_client: TestClient) -
     )
     assert response.status_code == 403
     assert response.json() == {"detail": "Request origin is required"}
+
+
+def test_tenant_owner_can_manage_custom_roles_with_csrf(auth_client: TestClient) -> None:
+    payload = {
+        "email": "owner-access@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "Tenant Owner",
+        "tenant_name": "Access Studio",
+        "tenant_slug": "access-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    assert registered.status_code == 201
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    membership_id = registered.json()["memberships"][0]["id"]
+    csrf_token = auth_client.cookies.get("abs_csrf")
+    assert csrf_token
+    headers = {"X-Tenant-ID": tenant_id, "X-CSRF-Token": csrf_token}
+
+    roles = auth_client.get("/api/v1/access/roles", headers=headers)
+    assert roles.status_code == 200
+    owner = next(item for item in roles.json()["items"] if item["name"] == "owner")
+    assert owner["is_system"] is True
+    assert "access.roles.manage" in owner["permission_codes"]
+
+    protected = auth_client.put(
+        f"/api/v1/access/roles/{owner['id']}/permissions",
+        json={"permission_codes": []},
+        headers={"X-Tenant-ID": tenant_id, "X-CSRF-Token": csrf_token},
+    )
+    assert protected.status_code == 409
+
+    created = auth_client.post(
+        "/api/v1/access/roles",
+        json={"name": "report-reader", "description": "Read-only reports"},
+        headers=headers,
+    )
+    assert created.status_code == 201
+    role_id = created.json()["id"]
+
+    replaced = auth_client.put(
+        f"/api/v1/access/roles/{role_id}/permissions",
+        json={"permission_codes": ["reports.read"]},
+        headers=headers,
+    )
+    assert replaced.status_code == 200
+    assert replaced.json()["permission_codes"] == ["reports.read"]
+
+    assigned = auth_client.put(
+        f"/api/v1/access/memberships/{membership_id}/roles/{role_id}",
+        headers=headers,
+    )
+    assert assigned.status_code == 204
+
+    duplicate = auth_client.post(
+        "/api/v1/access/roles",
+        json={"name": "report-reader"},
+        headers=headers,
+    )
+    assert duplicate.status_code == 409
+
+
+def test_access_control_mutations_reject_missing_csrf(auth_client: TestClient) -> None:
+    payload = {
+        "email": "csrf-access@example.test",
+        "password": "correct horse battery staple",
+        "display_name": "CSRF Owner",
+        "tenant_name": "CSRF Studio",
+        "tenant_slug": "csrf-studio",
+    }
+    registered = auth_client.post("/api/v1/auth/register", json=payload)
+    tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    response = auth_client.post(
+        "/api/v1/access/roles",
+        json={"name": "unsafe-role"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert response.status_code == 403
