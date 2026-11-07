@@ -40,6 +40,7 @@ def auth_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, 
     application.dependency_overrides[get_db_session] = override_db
     try:
         with TestClient(application) as client:
+            client.headers.update({"Origin": str(client.base_url).rstrip("/")})
             yield client
     finally:
         application.dependency_overrides.clear()
@@ -258,3 +259,13 @@ def test_rbac_is_tenant_scoped_and_requires_assigned_permission(auth_client: Tes
     )
     assert allowed.status_code == 200
     assert allowed.json()["tenant_id"] == tenant_id
+
+
+def test_unauthenticated_state_changes_require_origin(auth_client: TestClient) -> None:
+    response = auth_client.post(
+        "/api/v1/auth/login",
+        json={"email": "nobody@example.test", "password": "incorrect password"},
+        headers={"Origin": ""},
+    )
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Request origin is required"}
