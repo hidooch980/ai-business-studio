@@ -1,6 +1,7 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,7 +14,7 @@ from backend.app.identity.api_dependencies import (
     require_csrf_protection,
 )
 from backend.app.identity.api_schemas import AuthContextResponse, LoginRequest, RegisterRequest
-from backend.app.identity.models import AuditEvent
+from backend.app.identity.models import AuditEvent, UserSession
 from backend.app.identity.service import (
     IdentityConflictError,
     authenticate_user,
@@ -180,6 +181,71 @@ def current_session(
     db: Session = Depends(get_db_session),
 ) -> dict:
     return build_auth_context(db, principal.user)
+
+
+@router.get("/sessions")
+def list_user_sessions(
+    principal: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    sessions = db.scalars(
+        select(UserSession)
+        .where(UserSession.user_id == principal.user.id)
+        .order_by(UserSession.created_at.desc(), UserSession.id.desc())
+        .limit(50)
+    ).all()
+    now = datetime.now(UTC)
+    return {
+        "items": [
+            {
+                "id": str(item.id),
+                "created_at": item.created_at.isoformat(),
+                "expires_at": item.expires_at.isoformat(),
+                "revoked_at": item.revoked_at.isoformat() if item.revoked_at else None,
+                "is_current": item.id == principal.session.id,
+                "is_active": item.revoked_at is None
+                and (item.expires_at.replace(tzinfo=UTC) if item.expires_at.tzinfo is None else item.expires_at) > now,
+            }
+            for item in sessions
+        ]
+    }
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_user_session(
+    session_id: str,
+    response: Response,
+    principal: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    db: Session = Depends(get_db_session),
+) -> Response:
+    try:
+        target_id = UUID(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found") from exc
+    target = db.scalar(
+        select(UserSession)
+        .where(UserSession.id == target_id, UserSession.user_id == principal.user.id)
+        .with_for_update()
+    )
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    if target.revoked_at is None:
+        target.revoked_at = datetime.now(UTC)
+        db.add(
+            AuditEvent(
+                actor_user_id=principal.user.id,
+                action="auth.session_revoked",
+                resource_type="user_session",
+                resource_id=str(target.id),
+                outcome="success",
+            )
+        )
+        db.commit()
+    if target.id == principal.session.id:
+        _clear_session_cookie(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
