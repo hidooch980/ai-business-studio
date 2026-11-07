@@ -42,6 +42,25 @@ def _active_invitation(invitation: TenantInvitation, now: datetime) -> bool:
     return invitation.accepted_at is None and invitation.revoked_at is None and expires_at > now
 
 
+def _lock_tenant(db: Session, tenant_id: UUID) -> None:
+    db.scalar(select(Tenant.id).where(Tenant.id == tenant_id).with_for_update())
+
+
+def _enforce_invitation_rate_limit(db: Session, tenant_id: UUID, now: datetime) -> None:
+    recent_count = db.scalar(
+        select(func.count(AuditEvent.id)).where(
+            AuditEvent.tenant_id == tenant_id,
+            AuditEvent.action.in_(("invitation.created", "invitation.resent")),
+            AuditEvent.created_at >= now - timedelta(hours=1),
+        )
+    ) or 0
+    if recent_count >= 20:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Invitation rate limit exceeded",
+        )
+
+
 def _audit(db: Session, *, tenant_id: UUID, actor_user_id: UUID | None, action: str, invitation_id: UUID) -> None:
     db.add(AuditEvent(
         tenant_id=tenant_id,
@@ -84,6 +103,9 @@ def create_invitation(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> dict:
+    _lock_tenant(db, principal.tenant.id)
+    now = _now()
+    _enforce_invitation_rate_limit(db, principal.tenant.id, now)
     try:
         email = normalize_email(payload.email)
     except ValueError as exc:
@@ -95,13 +117,6 @@ def create_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     if role.is_system:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="System roles cannot be granted through invitations")
-    now = _now()
-    recent_count = db.scalar(select(func.count(TenantInvitation.id)).where(
-        TenantInvitation.tenant_id == principal.tenant.id,
-        TenantInvitation.created_at >= now - timedelta(hours=1),
-    )) or 0
-    if recent_count >= 20:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Invitation rate limit exceeded")
     pending = db.scalars(select(TenantInvitation).where(
         TenantInvitation.tenant_id == principal.tenant.id,
         func.lower(TenantInvitation.email) == email,
@@ -157,6 +172,9 @@ def resend_invitation(
     _csrf: None = Depends(require_csrf_protection),
     db: Session = Depends(get_db_session),
 ) -> dict:
+    now = _now()
+    _lock_tenant(db, principal.tenant.id)
+    _enforce_invitation_rate_limit(db, principal.tenant.id, now)
     invitation = db.scalar(select(TenantInvitation).where(
         TenantInvitation.id == invitation_id,
         TenantInvitation.tenant_id == principal.tenant.id,
