@@ -39,6 +39,22 @@ Manufacturing, industrial maintenance, fleet management, project management and 
 - [Reporting implementation backlog](docs/REPORTING_IMPLEMENTATION_BACKLOG.md)
 - [Acceptance and verification plan](docs/RETAIL_ACCEPTANCE_TEST_PLAN.md)
 
+## Frontend foundation
+
+A first responsive React + TypeScript + Vite UI prototype lives in `frontend/`.
+- Public landing page with retail capability and security sections.
+- OTP entry screen clearly marked as not connected to a delivery/API provider.
+- Role-oriented admin dashboard shell with explicitly labelled sample data.
+- Responsive desktop/mobile layouts and RTL-first Persian UI.
+- Frontend CI type-checks and builds the Vite app.
+
+This is an initial UI foundation, not a production-ready application: authentication, backend APIs, live data, payment flows, and role authorization still require implementation and integration.
+
+## UX/UI design foundation
+
+- [UX/UI design system and role workspaces](docs/UX_UI_DESIGN_SYSTEM.md)
+- [User application flows and navigation](docs/USER_APPLICATION_FLOWS.md)
+
 ## Architecture decisions
 
 - **Backend:** Python and FastAPI.
