@@ -4,15 +4,7 @@ A modular business operations platform for retail and multi-branch businesses in
 
 ## Product direction
 
-AI Business Studio is planned as an offline-capable platform with shared business data across:
-
-- Point of sale (POS), products, barcode/QR and sales
-- Inventory, warehouses, batches and expiry management
-- Procurement and supplier management
-- CRM, customer support and loyalty
-- ERP, finance and accounting workflows
-- Payment provider integrations and reconciliation
-- AI-assisted analytics, forecasting and management reporting
+AI Business Studio is planned as an offline-capable platform with shared business data across POS, inventory, procurement, CRM, ERP, finance, payments, reconciliation, and AI-assisted reporting.
 
 ## Architecture decisions
 
@@ -23,7 +15,7 @@ AI Business Studio is planned as an offline-capable platform with shared busines
 - **Local/offline mode:** SQLite on a single local node, with an application-level synchronization protocol. Never share a SQLite database file over a network filesystem.
 - **API:** versioned REST endpoints under `/api/v1`.
 - **Financial and inventory records:** append-only ledgers; corrections use reversal or adjustment entries.
-- **Multi-tenancy:** tenant-scoped data access and authorization checks at service boundaries; implementation is pending.
+- **Multi-tenancy:** tenant-scoped data access and authorization checks at service boundaries; only identity membership foundations are currently implemented.
 - **AI:** provider-independent interfaces; AI suggestions are advisory and sensitive actions require authorized human approval.
 
 ## Current implementation status
@@ -37,18 +29,22 @@ Implemented in the foundation branch:
 - Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
 - Database-enforced tenant consistency for membership-role assignments using composite foreign keys.
 - Case-insensitive unique email index enforced by the database.
-- Explicit initial Alembic revision (`0001_identity`) for the tenant and identity tables.
-- SQLite tests for identity models, authentication primitives, session lifecycle, tenant role assignment, and migration upgrade/downgrade.
-- SQLite database unit test and PostgreSQL connectivity integration smoke test.
-- CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service.
+- Initial Alembic revision (`0001_identity`).
+- HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
+- Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
+- Public self-registration is disabled by default and requires explicit environment configuration.
+- Successful registration/login audit events and API tests for cookie/session lifecycle and invalid credentials.
+- SQLite identity tests and PostgreSQL integration smoke test.
+- CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service and strict pytest warnings.
 
-Not implemented yet:
-- Production login/logout HTTP endpoints, secure session-cookie policy, CSRF protection, account recovery, MFA, and rate limiting. The current identity service functions are backend primitives, not a production authentication API.
-
-- Tenant-scoped authorization across every business API, role/permission administration APIs, and immutable audit enforcement at the database layer.
+Not implemented and still required before production use:
+- CSRF token validation and trusted-origin enforcement for cookie-authenticated state-changing requests.
+- Persistent login rate limiting, lockout policy, failed-attempt monitoring, MFA, and account recovery.
+- Complete RBAC permission evaluation and enforcement on tenant-scoped business endpoints.
+- Database-enforced append-only audit controls.
 - Product, inventory, POS, procurement, CRM, ERP, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
 
-A documented or planned capability is not evidence that it is implemented or production-ready. No production deployment or release is declared.
+The authentication API is an incremental foundation, not a production-ready security boundary. Do not expose it to real customer data or public production traffic until the remaining security gates are implemented and independently verified. A documented or planned capability is not evidence that it is implemented.
 
 ## Development
 
@@ -58,21 +54,23 @@ Install development dependencies:
 python -m pip install -e ".[dev]"
 ```
 
-Run unit tests:
+Run unit tests and lint:
 
 ```bash
 pytest
 ruff check .
 ```
 
-Configure `DATABASE_URL` before running migrations. Example:
+Configure `DATABASE_URL` before running migrations:
 
 ```bash
 export DATABASE_URL='postgresql+psycopg://app:password@localhost:5432/ai_business_studio'
 alembic upgrade head
 ```
 
-Do not run migrations against production without a reviewed migration, verified backup, and a tested rollback/recovery plan.
+Authentication configuration is documented in `.env.example`. Keep public registration disabled unless an intentional onboarding flow is in place. Set `SESSION_COOKIE_SECURE=true` behind HTTPS.
+
+Do not run migrations against production without a reviewed migration, verified backup, and tested recovery plan.
 
 ## Security
 
