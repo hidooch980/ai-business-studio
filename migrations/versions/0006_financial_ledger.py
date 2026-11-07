@@ -116,7 +116,7 @@ def upgrade() -> None:
         """))
         op.execute(sa.text("""
             CREATE FUNCTION prevent_journal_overpost()
-            RETURNS trigger LANGUAGE plpgsql AS $
+            RETURNS trigger LANGUAGE plpgsql AS $ledger$
             DECLARE
                 target_debit integer;
                 target_credit integer;
@@ -138,7 +138,7 @@ def upgrade() -> None:
                 END IF;
                 RETURN NEW;
             END;
-            $
+            $ledger$
         """))
         op.execute(sa.text("""
             CREATE TRIGGER journal_lines_no_overpost
