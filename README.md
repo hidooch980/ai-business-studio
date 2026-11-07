@@ -18,26 +18,53 @@ AI Business Studio is planned as an offline-capable platform with shared busines
 
 - **Backend:** Python and FastAPI.
 - **Architecture:** modular monolith with explicit domain boundaries and versioned contracts.
-- **Central database:** PostgreSQL.
+- **Central database:** PostgreSQL, accessed through SQLAlchemy 2.x.
+- **Migrations:** Alembic; schema changes must be versioned and reviewed.
 - **Local/offline mode:** SQLite on a single local node, with an application-level synchronization protocol. Never share a SQLite database file over a network filesystem.
 - **API:** versioned REST endpoints under `/api/v1`.
 - **Financial and inventory records:** append-only ledgers; corrections use reversal or adjustment entries.
-- **Multi-tenancy:** tenant-scoped data access and authorization checks at service boundaries.
+- **Multi-tenancy:** tenant-scoped data access and authorization checks at service boundaries; implementation is pending.
 - **AI:** provider-independent interfaces; AI suggestions are advisory and sensitive actions require authorized human approval.
 
-## Repository status
+## Current implementation status
 
-This repository is being bootstrapped. A documented architecture or planned capability is not evidence that the feature is implemented or production-ready. See the project documentation and CI results as implementation progresses.
+Implemented in the foundation branch:
+- FastAPI application factory and versioned health endpoint.
+- Environment-based application and optional database configuration.
+- SQLAlchemy engine/session foundation with lazy connection behavior.
+- Alembic migration environment.
+- SQLite database unit test and PostgreSQL connectivity integration smoke test.
+- CI matrix for Python 3.11/3.12 with a PostgreSQL 16 service.
+
+Not implemented yet:
+- Identity, login/session management, RBAC, tenant models and tenant isolation.
+- Product, inventory, POS, procurement, CRM, ERP, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
+
+A documented or planned capability is not evidence that it is implemented or production-ready. No production deployment or release is declared.
 
 ## Development
 
-The initial foundation will establish:
+Install development dependencies:
 
-1. Application factory and health endpoint
-2. Configuration through environment variables
-3. Automated tests and CI
-4. Security and contribution baselines
-5. Domain modules introduced incrementally behind tested contracts
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Run unit tests:
+
+```bash
+pytest
+ruff check .
+```
+
+Configure `DATABASE_URL` before running migrations. Example:
+
+```bash
+export DATABASE_URL='postgresql+psycopg://app:password@localhost:5432/ai_business_studio'
+alembic upgrade head
+```
+
+Do not run migrations against production without a reviewed migration, verified backup, and a tested rollback/recovery plan.
 
 ## Security
 
