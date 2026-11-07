@@ -18,13 +18,18 @@ The next implementation increment establishes persistence and identity primitive
 
 ## Delivery sequence
 
-1. Add SQLAlchemy, Alembic, PostgreSQL driver, and validated database settings.
-2. Add a migration environment and an initial metadata baseline.
-3. Add tenant, user, membership, role, permission, and session models.
-4. Implement authentication and authorization services.
-5. Add tenant-isolation and privilege-escalation regression tests.
-6. Add PostgreSQL service integration to CI.
-7. Add migration upgrade tests and backup/restore rehearsal.
+Completed in the current foundation branch:
+1. SQLAlchemy, Alembic, PostgreSQL driver, validated database settings, and PostgreSQL CI service.
+2. Initial identity schema and versioned migrations, including session CSRF digests and persistent login rate-limit state.
+3. Argon2 identity primitives, cookie-based register/login/me/logout endpoints, session revocation, CSRF double-submit validation, same-host Origin/Referer checks, and persistent lockout.
+4. Regression tests for cross-tenant role assignment, credential failures, session lifecycle, CSRF rejection, lockout, and migration upgrade/downgrade.
+
+Remaining delivery sequence:
+1. Implement deny-by-default RBAC permission evaluation and FastAPI authorization dependencies.
+2. Enforce tenant scope on every business read/write and test cross-tenant access attempts.
+3. Strengthen audit append-only guarantees at the database layer.
+4. Add MFA, recovery flows, session/device management, and backup/restore rehearsal.
+5. Perform security review and production deployment rehearsal before real customer data is permitted.
 
 ## Exit criteria
 
