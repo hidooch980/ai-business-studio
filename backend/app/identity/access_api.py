@@ -174,7 +174,7 @@ def replace_role_permissions(
     permissions = db.scalars(select(Permission).where(Permission.code.in_(codes))).all() if codes else []
     found_codes = {item.code for item in permissions}
     if found_codes != set(codes):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown permission code")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown permission code")
     db.query(RolePermission).filter(RolePermission.role_id == role.id).delete(synchronize_session=False)
     db.add_all([RolePermission(role_id=role.id, permission_id=item.id) for item in permissions])
     _audit(db, principal, "access.role_permissions_replaced", "role", str(role.id))
