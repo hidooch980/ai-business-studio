@@ -832,7 +832,7 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     assert registered.status_code == 201
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
     _create_financial_period(auth_client, tenant_id)
-    _create_financial_account(auth_client, tenant_id, "cash", "asset")
+    cash_account = _create_financial_account(auth_client, tenant_id, "cash", "asset")
     _create_financial_account(auth_client, tenant_id, "accounts-receivable", "asset")
     headers = {
         "X-Tenant-ID": tenant_id,
@@ -864,6 +864,15 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
     assert report.json()["total_debits_minor"] == 12500
     assert report.json()["total_credits_minor"] == 12500
     assert report.json()["unmapped_journal_lines"] == 0
+    ledger = auth_client.get(
+        f"/api/v1/finance/reports/general-ledger/{cash_account['id']}",
+        params={"currency": "USD", "start_date": "2000-01-01", "end_date": "2100-12-31"},
+        headers={"X-Tenant-ID": tenant_id},
+    )
+    assert ledger.status_code == 200
+    assert len(ledger.json()["items"]) == 1
+    assert ledger.json()["items"][0]["debit_minor"] == 12500
+    assert ledger.json()["closing_balance_minor"] == 12500
     replay = auth_client.post("/api/v1/finance/journals", json=payload, headers=headers)
     assert replay.status_code == 201
     assert replay.json()["created"] is False
@@ -948,6 +957,11 @@ def test_financial_journal_is_balanced_idempotent_and_tenant_scoped(auth_client:
         },
     )
     assert cross_tenant_post.status_code == 422
+    foreign_ledger = auth_client.get(
+        f"/api/v1/finance/reports/general-ledger/{cash_account['id']}",
+        headers={"X-Tenant-ID": other_tenant_id},
+    )
+    assert foreign_ledger.status_code == 404
 
 
 def test_financial_journal_reversal_is_one_time_and_balanced(auth_client: TestClient) -> None:
