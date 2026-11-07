@@ -81,23 +81,6 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         assert "ck_journal_line_one_sided" in {
             item["name"] for item in inspect(engine).get_check_constraints("journal_lines")
         }
-        with engine.begin() as connection:
-            connection.execute(
-                text("UPDATE financial_periods SET status = 'closed' WHERE tenant_id = :tenant"),
-                {"tenant": tenant_id},
-            )
-        with pytest.raises(DBAPIError, match="open accounting period"):
-            with engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "INSERT INTO journal_entries "
-                        "(id, tenant_id, idempotency_key, request_hash, currency, posting_date, description, "
-                        "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
-                        "VALUES (:id, :tenant, 'closed-period-direct-write', :hash, 'USD', '2026-01-01', "
-                        "'Closed period test', 100, 100, :user, '2026-01-01 00:00:00')"
-                    ),
-                    {"id": uuid4().hex, "tenant": tenant_id, "hash": "2" * 64, "user": user_id},
-                )
         with engine.connect() as connection:
             catalog_codes = set(
                 connection.execute(
@@ -174,6 +157,23 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
                     {"id": uuid4().hex, "tenant": tenant_id, "entry": entry_id},
                 )
 
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE financial_periods SET status = 'closed' WHERE tenant_id = :tenant"),
+                {"tenant": tenant_id},
+            )
+        with pytest.raises(DBAPIError, match="open accounting period"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO journal_entries "
+                        "(id, tenant_id, idempotency_key, request_hash, currency, posting_date, description, "
+                        "debit_total_minor, credit_total_minor, created_by_user_id, created_at) "
+                        "VALUES (:id, :tenant, 'closed-period-direct-write', :hash, 'USD', '2026-01-01', "
+                        "'Closed period test', 100, 100, :user, '2026-01-01 00:00:00')"
+                    ),
+                    {"id": uuid4().hex, "tenant": tenant_id, "hash": "2" * 64, "user": user_id},
+                )
         product_id = uuid4().hex
         warehouse_id = uuid4().hex
         movement_id = uuid4().hex
