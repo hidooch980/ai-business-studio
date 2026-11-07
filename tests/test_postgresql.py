@@ -113,6 +113,50 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
                     text("UPDATE journal_entries SET description = 'tampered' WHERE id = :id"),
                     {"id": entry_id},
                 )
+
+        product_id = uuid4()
+        warehouse_id = uuid4()
+        movement_id = uuid4()
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO products "
+                    "(id, tenant_id, sku, name, unit_code, is_active, created_at, updated_at) "
+                    "VALUES (:id, :tenant, 'PG-STOCK', 'Postgres stock', 'pcs', true, :created_at, :created_at)"
+                ),
+                {"id": product_id, "tenant": tenant_id, "created_at": "2026-01-01T00:00:00+00:00"},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO warehouses (id, tenant_id, code, name, is_active, created_at, updated_at) "
+                    "VALUES (:id, :tenant, 'PG-MAIN', 'Postgres main', true, :created_at, :created_at)"
+                ),
+                {"id": warehouse_id, "tenant": tenant_id, "created_at": "2026-01-01T00:00:00+00:00"},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO inventory_movements "
+                    "(id, tenant_id, warehouse_id, product_id, movement_type, quantity_delta, "
+                    "idempotency_key, request_hash, created_by_user_id, created_at) "
+                    "VALUES (:id, :tenant, :warehouse, :product, 'receipt', 5, "
+                    "'pg-stock-test', :hash, :user, :created_at)"
+                ),
+                {
+                    "id": movement_id,
+                    "tenant": tenant_id,
+                    "warehouse": warehouse_id,
+                    "product": product_id,
+                    "hash": "0" * 64,
+                    "user": user_id,
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+            )
+        with pytest.raises(DBAPIError, match="inventory movements are append-only"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text("UPDATE inventory_movements SET quantity_delta = 6 WHERE id = :id"),
+                    {"id": movement_id},
+                )
     finally:
         engine.dispose()
 
