@@ -1,10 +1,7 @@
 import { useState, type FormEvent } from "react";
+import RoleWorkspace from "./RoleWorkspace";
 
 type Screen = "home" | "login" | "dashboard";
-type NavItem = "نمای کلی" | "فروش" | "موجودی" | "مشتریان" | "گزارش‌ها";
-
-const navItems: NavItem[] = ["نمای کلی", "فروش", "موجودی", "مشتریان", "گزارش‌ها"];
-
 function Brand() {
   return <div className="brand"><span className="brand-mark">✦</span><span>AI Business <b>Studio</b></span></div>;
 }
@@ -35,9 +32,7 @@ function Login({ onBack, onPreview }: { onBack: () => void; onPreview: () => voi
 }
 
 function Dashboard({ onHome }: { onHome: () => void }) {
-  const [active,setActive]=useState<NavItem>("نمای کلی");
-  const descriptions: Record<NavItem,string> = {"نمای کلی":"نمای کلی کسب‌وکار","فروش":"مدیریت فروش و تراکنش‌ها","موجودی":"کالاها و وضعیت انبار","مشتریان":"مدیریت ارتباط با مشتریان","گزارش‌ها":"گزارش‌های مدیریتی"};
-  return <div className="dashboard"><aside className="app-sidebar"><Brand /><div className="workspace-label">فضای کاری مدیر کل</div><nav>{navItems.map((item,i)=><button key={item} className={active===item?"active":""} onClick={()=>setActive(item)}><span>{["▦","▣","▤","♙","⌁"][i]}</span>{item}</button>)}</nav><div className="sidebar-bottom"><span className="avatar">م</span><div><b>مدیر نمونه</b><small>حساب نمایشی</small></div><button onClick={onHome} aria-label="خروج به صفحه اصلی">↪</button></div></aside><main className="dashboard-main"><header className="dash-header"><div><small>فضای کاری / مدیر کل</small><h1>{descriptions[active]}</h1></div><div className="dash-header-actions"><span className="demo-tag">● محیط نمایشی</span><button className="icon-button" aria-label="اعلان‌ها">♧</button></div></header><div className="demo-warning">این صفحه صرفاً پیش‌نمایش رابط کاربری است؛ اعداد و نمودارها داده واقعی فروشگاه نیستند.</div><section className="metric-grid">{[["فروش امروز","۱۲,۸۵۰,۰۰۰","تومان","+۱۲٪ نسبت به دوره قبل"],["سفارش‌های امروز","۱۲۸","سفارش","+۸٪ نسبت به دوره قبل"],["مشتریان فعال","۸۴۲","نفر","+۵٪ نسبت به دوره قبل"],["نیازمند پیگیری","۷","مورد","۳ مورد فوری"]].map((x,i)=><article className="metric-card" key={x[0]}><div className="metric-top"><span>{x[0]}</span><i>{["↗","▣","♙","!"][i]}</i></div><b className="metric-value">{x[1]} <small>{x[2]}</small></b><span className={i===3?"metric-alert":"metric-positive"}>{x[3]}</span></article>)}</section><section className="dashboard-grid"><article className="panel sales-panel"><div className="panel-heading"><div><h2>روند فروش</h2><p>نمایش نمونه عملکرد هفتگی</p></div><button className="select-button">۷ روز اخیر⌄</button></div><div className="sales-chart"><div className="y-labels"><span>۱۵م</span><span>۱۰م</span><span>۵م</span><span>۰</span></div><div className="chart-area"><div className="grid-lines"><i/><i/><i/><i/></div><div className="sales-bars">{[38,55,46,72,59,86,68].map((h,i)=><div key={i}><i style={{height:h+"%"}}/><small>{["ش","ی","د","س","چ","پ","ج"][i]}</small></div>)}</div></div></div></article><article className="panel"><div className="panel-heading"><div><h2>هشدارهای مدیریتی</h2><p>نمونه موارد نیازمند توجه</p></div><span className="count-pill">۳</span></div><div className="alert-list"><div><i className="alert-dot amber"/> <span><b>موجودی رو به اتمام</b><small>۳ کالای نمونه نیازمند بررسی</small></span></div><div><i className="alert-dot red"/> <span><b>درخواست تأیید</b><small>۱ درخواست خرید در انتظار</small></span></div><div><i className="alert-dot blue"/> <span><b>گزارش شعبه</b><small>گزارش روزانه هنوز ثبت نشده</small></span></div></div></article></section><section className="panel table-panel"><div className="panel-heading"><div><h2>عملکرد شعب</h2><p>اطلاعات نمونه برای نمایش چیدمان جدول</p></div><button className="text-link">مشاهده همه ←</button></div><div className="table-wrap"><table><thead><tr><th>شعبه</th><th>وضعیت</th><th>فروش نمونه</th><th>سفارش</th><th>عملکرد</th></tr></thead><tbody>{[["شعبه مرکزی","فعال","۵,۴۰۰,۰۰۰","۵۲","۸۲٪"],["شعبه شمال","فعال","۴,۱۵۰,۰۰۰","۴۱","۷۱٪"],["شعبه غرب","نیازمند بررسی","۳,۳۰۰,۰۰۰","۳۵","۶۴٪"]].map(row=><tr key={row[0]}><td><b>{row[0]}</b></td><td><span className={row[1]==="فعال"?"status-ok":"status-warn"}>{row[1]}</span></td><td>{row[2]}</td><td>{row[3]}</td><td><span className="progress"><i style={{width:row[4]}}/></span> {row[4]}</td></tr>)}</tbody></table></div></section></main></div>;
+  return <RoleWorkspace onHome={onHome} />;
 }
 
 export default function App() {
