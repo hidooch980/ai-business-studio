@@ -35,7 +35,9 @@ Implemented in the foundation branch:
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
 - Tenant-scoped product catalog API: create, list/search, update and soft-deactivate products; tenant-unique SKU/barcode constraints; catalog-specific permissions and audit events.
 - Tenant-scoped inventory foundation: warehouse management, append-only receipt/issue/adjustment movements, idempotency keys, non-negative stock protection, database-maintained balance projections, tenant-composite foreign keys and SQLite/PostgreSQL immutability triggers.
+- Durable transactional outbox foundation: inventory movement events are committed atomically with stock changes; tenant deduplication, PostgreSQL skip-locked claims, expiring worker leases, retry scheduling and dead-letter state are implemented. A continuously running dispatcher and provider adapters are not yet deployed.
 - Durable transactional outbox foundation: tenant-scoped event deduplication, event enqueue in the inventory movement transaction, worker leases, stale-lease protection, retry scheduling and dead-letter state.
+- Tenant-scoped chart-of-accounts API with typed asset/liability/equity/income/expense accounts, same-type parent hierarchy, tenant-safe composite foreign keys, duplicate-code protection and guarded deactivation. Journal lines are not yet linked to account IDs.
 - Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, and SQLite/PostgreSQL mutation and overposting guards.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Authenticated users can list their own recent sessions and revoke individual sessions, including the current session; revocation is CSRF-protected and audited.
@@ -53,7 +55,7 @@ Not implemented and still required before production use:
 - MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
 - API-wide IP/account rate limits; invitation create/resend currently has a per-tenant 20-per-hour limit.
 - Independent production security review and additional PostgreSQL concurrency stress tests for role and invitation operations.
-- Complete accounting domain: chart of accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
+- Complete accounting domain: link journal lines to chart accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
 
 - Product categories/unit conversion, batch/expiry tracking, stock valuation, POS, procurement, sales, CRM, notification delivery/worker processes, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
 
