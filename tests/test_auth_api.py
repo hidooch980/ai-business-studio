@@ -888,6 +888,8 @@ def test_user_can_list_and_revoke_only_their_own_sessions(auth_client: TestClien
     assert len(sessions.json()["items"]) == 2
     assert sum(item["is_current"] for item in sessions.json()["items"]) == 1
 
+    missing_csrf = auth_client.delete(f"/api/v1/auth/sessions/{first_session_id}")
+    assert missing_csrf.status_code == 403
     revoke_old = auth_client.delete(
         f"/api/v1/auth/sessions/{first_session_id}",
         headers={"X-CSRF-Token": auth_client.cookies.get("abs_csrf")},
