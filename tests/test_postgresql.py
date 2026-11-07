@@ -124,3 +124,119 @@ def test_postgresql_migrations_and_append_only_audit_trigger() -> None:
         text=True,
     )
     assert downgrade.returncode == 0, f"PostgreSQL downgrade failed:\\n{downgrade.stdout}\\n{downgrade.stderr}"
+
+
+@pytest.mark.skipif(not os.getenv("DATABASE_URL"), reason="PostgreSQL CI service is not configured")
+def test_postgresql_concurrent_owner_deactivation_preserves_last_owner() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from fastapi import HTTPException
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.identity.access_api import MembershipStatusRequest, set_membership_status
+    from backend.app.identity.api_dependencies import TenantPrincipal
+    from backend.app.identity.models import Membership, MembershipRole, Role, Tenant, User
+
+    environment = os.environ.copy()
+    upgrade = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        check=False,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert upgrade.returncode == 0, f"PostgreSQL migration failed:\\n{upgrade.stdout}\\n{upgrade.stderr}"
+
+    engine = build_engine(os.environ["DATABASE_URL"])
+    sessions = sessionmaker(bind=engine, expire_on_commit=False)
+    tenant_id = uuid4()
+    actor_user_id, first_user_id, second_user_id = uuid4(), uuid4(), uuid4()
+    actor_membership_id, first_membership_id, second_membership_id = uuid4(), uuid4(), uuid4()
+    owner_role_id = uuid4()
+
+    try:
+        with sessions.begin() as db:
+            tenant = Tenant(id=tenant_id, name="Concurrent owner test", slug=f"owner-race-{tenant_id.hex}")
+            actor = User(
+                id=actor_user_id,
+                email=f"{actor_user_id.hex}@example.test",
+                password_hash="unused",
+                display_name="Membership manager",
+            )
+            first_owner = User(
+                id=first_user_id,
+                email=f"{first_user_id.hex}@example.test",
+                password_hash="unused",
+                display_name="First owner",
+            )
+            second_owner = User(
+                id=second_user_id,
+                email=f"{second_user_id.hex}@example.test",
+                password_hash="unused",
+                display_name="Second owner",
+            )
+            role = Role(id=owner_role_id, tenant_id=tenant_id, name="owner", is_system=True)
+            db.add_all([
+                tenant, actor, first_owner, second_owner, role,
+                Membership(id=actor_membership_id, tenant_id=tenant_id, user_id=actor_user_id),
+                Membership(id=first_membership_id, tenant_id=tenant_id, user_id=first_user_id),
+                Membership(id=second_membership_id, tenant_id=tenant_id, user_id=second_user_id),
+            ])
+            db.flush()
+            db.add_all([
+                MembershipRole(tenant_id=tenant_id, membership_id=first_membership_id, role_id=owner_role_id),
+                MembershipRole(tenant_id=tenant_id, membership_id=second_membership_id, role_id=owner_role_id),
+            ])
+
+        barrier = Barrier(2)
+
+        def deactivate(target_membership_id):
+            barrier.wait(timeout=10)
+            with sessions() as db:
+                actor = db.get(User, actor_user_id)
+                actor_membership = db.get(Membership, actor_membership_id)
+                tenant = db.get(Tenant, tenant_id)
+                principal = TenantPrincipal(
+                    user=actor,
+                    session=None,
+                    membership=actor_membership,
+                    tenant=tenant,
+                )
+                try:
+                    set_membership_status(
+                        target_membership_id,
+                        MembershipStatusRequest(is_active=False),
+                        principal,
+                        None,
+                        db,
+                    )
+                    return status.HTTP_200_OK
+                except HTTPException as exc:
+                    db.rollback()
+                    return exc.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(deactivate, [first_membership_id, second_membership_id]))
+
+        assert sorted(results) == [200, 409]
+        with sessions() as db:
+            active_owners = db.query(Membership).join(
+                MembershipRole, MembershipRole.membership_id == Membership.id
+            ).filter(
+                Membership.tenant_id == tenant_id,
+                MembershipRole.tenant_id == tenant_id,
+                MembershipRole.role_id == owner_role_id,
+                Membership.is_active.is_(True),
+            ).count()
+            assert active_owners == 1
+    finally:
+        engine.dispose()
+        downgrade = subprocess.run(
+            [sys.executable, "-m", "alembic", "downgrade", "base"],
+            check=False,
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        assert downgrade.returncode == 0, f"PostgreSQL downgrade failed:\\n{downgrade.stdout}\\n{downgrade.stderr}"
