@@ -57,7 +57,7 @@ Status: **Journal foundation implemented; accounting domain incomplete**
 - [x] Tenant-scoped trial balance by currency and posting date, with debit/credit totals and unmapped-line detection.
 - [x] Tenant-scoped general ledger with date range, currency filter, opening/closing balances, and running balances.
 - [x] Tenant-scoped income statement and balance sheet reports with currency/date filters, normal-balance calculations, cumulative earnings, unmapped-line visibility, and reconciliation status.
-- [ ] Balance sheet and profit/loss reports.
+- [x] Income statement and balance sheet reports with date/currency filters and unmapped-line reconciliation visibility (implemented above).
 - [ ] Reconciliation and adjustment workflows.
 - [ ] Multi-currency FX source, conversion, and rounding policy.
 - [ ] Tax rules and audit-ready exports.
@@ -90,7 +90,8 @@ Status: **Transactional outbox core implemented; dispatch and workflow features 
 - [x] Inventory movement events are enqueued in the same database transaction as stock posting.
 - [x] Atomic SQLite claims and PostgreSQL skip-locked worker leasing, stale-lease protection, retry scheduling and dead-letter state with service tests.
 - [x] Reusable leased-batch dispatcher with typed handler registry, isolated per-event sessions, delivery acknowledgement, retry handling, and dead-letter handling; regression tests cover success, handler failure, and unknown event types.
-- [ ] Long-running worker process, graceful shutdown, health/metrics, and handler registry wiring.
+- [x] Configurable handler-factory registry, long-running polling worker, bounded batch/poll settings, graceful SIGTERM/SIGINT shutdown, console entry point, and hardened systemd service template.
+- [ ] Concrete inventory/provider handler package, worker health/metrics, and operational alerting.
 - [ ] Configurable multi-step approvals and separation of duties.
 - [ ] In-app notifications and email provider adapter.
 - [ ] Provider delivery adapters, idempotent event consumers, retry telemetry and operational dashboards.
