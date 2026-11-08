@@ -11,7 +11,11 @@ DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="TEST_DATABASE_URL is not configured")
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "migrations" / "0001_identity_security.sql"
+MIGRATIONS = [
+    ROOT / "migrations" / "0001_identity_security.sql",
+    ROOT / "migrations" / "0002_transactional_infrastructure.sql",
+    ROOT / "migrations" / "0003_suppliers_purchase_orders.sql",
+]
 RUNTIME_URL = "postgresql://retail_runtime:runtime-test-only@localhost:5432/retail_test"
 
 TENANT_A = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -36,7 +40,13 @@ def postgres_schema():
             "CREATE ROLE retail_runtime LOGIN PASSWORD 'runtime-test-only' "
             "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS"
         )
-        conn.execute(MIGRATION.read_text(encoding="utf-8"))
+        from retail_app.infrastructure.migrations import apply_migrations
+
+        assert apply_migrations(DATABASE_URL, ROOT / "migrations") == [
+            "0001_identity_security.sql",
+            "0002_transactional_infrastructure.sql",
+            "0003_suppliers_purchase_orders.sql",
+        ]
         conn.execute("GRANT USAGE ON SCHEMA public TO retail_runtime")
         conn.execute(
             "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO retail_runtime"
@@ -135,11 +145,13 @@ def test_1_migration_applies_and_forces_rls_on_all_scoped_tables():
             WHERE c.relname IN (
                 'tenants', 'branches', 'identities', 'tenant_memberships',
                 'branch_memberships', 'auth_sessions', 'otp_challenges',
-                'security_audit_events'
+                'security_audit_events', 'idempotency_records', 'domain_events',
+                'outbox_messages', 'audit_events', 'suppliers', 'purchase_orders',
+                'purchase_order_lines'
             )
             """
         ).fetchall()
-    assert len(rows) == 8
+    assert len(rows) == 15
     assert all(forced for _, forced in rows)
 
 
@@ -214,3 +226,178 @@ def test_7_anonymous_otp_rows_require_explicit_onboarding_context(runtime):
             """,
             (UUID("cccccccc-3002-4000-8000-000000000002"),),
         )
+
+
+
+def test_8_procurement_tables_are_tenant_isolated(runtime):
+    supplier_id = UUID("aaaaaaaa-4001-4000-8000-000000000001")
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        runtime.execute(
+            """
+            INSERT INTO suppliers (tenant_id, id, legal_name)
+            VALUES (%s, %s, 'Tenant A Supplier')
+            """,
+            (TENANT_A, supplier_id),
+        )
+        assert runtime.execute(
+            "SELECT legal_name FROM suppliers WHERE id = %s", (supplier_id,)
+        ).fetchone() == ("Tenant A Supplier",)
+        set_context(runtime, TENANT_B, USER_B)
+        assert runtime.execute(
+            "SELECT id FROM suppliers WHERE id = %s", (supplier_id,)
+        ).fetchall() == []
+
+
+def test_9_idempotency_and_event_records_are_tenant_scoped(runtime):
+    from uuid import uuid4
+
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        record_id = uuid4()
+        runtime.execute(
+            """
+            INSERT INTO idempotency_records
+                (id, tenant_id, operation, idempotency_key, request_sha256, state)
+            VALUES (%s, %s, 'purchase_order.create', 'test-key-0000001',
+                    decode(repeat('01', 32), 'hex'), 'processing')
+            """,
+            (record_id, TENANT_A),
+        )
+        event_id = uuid4()
+        runtime.execute(
+            """
+            INSERT INTO domain_events
+                (id, tenant_id, aggregate_type, aggregate_id, aggregate_version,
+                 event_type, payload)
+            VALUES (%s, %s, 'purchase_order', %s, 1,
+                    'purchase_order.created', '{"status":"draft"}'::jsonb)
+            """,
+            (event_id, TENANT_A, uuid4()),
+        )
+        runtime.execute(
+            """
+            INSERT INTO outbox_messages (id, tenant_id, event_id, destination)
+            VALUES (%s, %s, %s, 'internal')
+            """,
+            (uuid4(), TENANT_A, event_id),
+        )
+        assert runtime.execute("SELECT count(*) FROM idempotency_records").fetchone()[0] == 1
+        set_context(runtime, TENANT_B, USER_B)
+        assert runtime.execute("SELECT count(*) FROM idempotency_records").fetchone()[0] == 0
+        assert runtime.execute("SELECT count(*) FROM domain_events").fetchone()[0] == 0
+        assert runtime.execute("SELECT count(*) FROM outbox_messages").fetchone()[0] == 0
+
+
+def test_10_domain_events_and_business_audit_are_append_only(runtime):
+    from uuid import uuid4
+
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        event_id = uuid4()
+        runtime.execute(
+            """
+            INSERT INTO domain_events
+                (id, tenant_id, aggregate_type, aggregate_id, aggregate_version,
+                 event_type, payload)
+            VALUES (%s, %s, 'supplier', %s, 1, 'supplier.created', '{}'::jsonb)
+            """,
+            (event_id, TENANT_A, uuid4()),
+        )
+        with pytest.raises(psycopg.errors.RaiseException), runtime.transaction():
+            runtime.execute(
+                "UPDATE domain_events SET event_type = 'supplier.changed' WHERE id = %s",
+                (event_id,),
+            )
+
+
+def test_11_supplier_and_purchase_order_services_commit_atomically_and_replay(runtime):
+    from datetime import date
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.infrastructure.idempotency import IdempotencyConflict
+    from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
+    from retail_app.procurement.service import create_purchase_order, create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier_id = str(uuid4())
+    supplier = Supplier(supplier_id, str(TENANT_A), "Integration Supplier")
+
+    created_supplier = create_supplier(
+        database, actor, supplier, idempotency_key="supplier-integration-0001"
+    )
+    replayed_supplier = create_supplier(
+        database, actor, supplier, idempotency_key="supplier-integration-0001"
+    )
+    assert replayed_supplier == created_supplier
+
+    with pytest.raises(IdempotencyConflict):
+        create_supplier(
+            database, actor,
+            Supplier(supplier_id, str(TENANT_A), "Changed Supplier Name"),
+            idempotency_key="supplier-integration-0001",
+        )
+
+    order = PurchaseOrder(
+        id=str(uuid4()),
+        tenant_id=str(TENANT_A),
+        branch_id=str(BRANCH_A),
+        supplier_id=supplier_id,
+        currency="EUR",
+        order_date=date(2026, 11, 8),
+        lines=(PurchaseOrderLine(1, str(uuid4()), "Test item", 2000, 125),),
+        order_number="PO-INTEGRATION-0001",
+    )
+    created_order = create_purchase_order(
+        database, actor, order, idempotency_key="purchase-order-integration-01"
+    )
+    replayed_order = create_purchase_order(
+        database, actor, order, idempotency_key="purchase-order-integration-01"
+    )
+    assert replayed_order == created_order
+    assert created_order["total_minor"] == 250
+
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        assert runtime.execute(
+            "SELECT count(*) FROM suppliers WHERE id = %s", (supplier_id,)
+        ).fetchone()[0] == 1
+        assert runtime.execute(
+            "SELECT count(*) FROM purchase_order_lines WHERE purchase_order_id = %s",
+            (order.id,),
+        ).fetchone()[0] == 1
+        assert runtime.execute(
+            "SELECT count(*) FROM audit_events WHERE resource_id IN (%s, %s)",
+            (supplier_id, order.id),
+        ).fetchone()[0] == 2
+
+
+def test_12_concurrent_supplier_create_replays_one_idempotent_result():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.procurement.service import create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier = Supplier(str(uuid4()), str(TENANT_A), "Concurrent Supplier")
+    barrier = Barrier(2)
+
+    def create_once():
+        barrier.wait(timeout=10)
+        return create_supplier(
+            database, actor, supplier, idempotency_key="supplier-concurrent-0001"
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: create_once(), range(2)))
+
+    assert results[0] == results[1]

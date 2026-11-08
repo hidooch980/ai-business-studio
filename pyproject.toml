@@ -20,5 +20,7 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 120
-ignore = ["FURB157"]
 target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["FURB157"]
