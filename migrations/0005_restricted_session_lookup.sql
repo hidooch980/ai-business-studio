@@ -1,12 +1,11 @@
 BEGIN;
 
--- This non-login role is deliberately privileged only for one table and one
--- SECURITY DEFINER function. It has BYPASSRLS so it can locate a session before
--- tenant/subject context exists, but receives no privileges on other tables.
+-- This non-login role is deliberately scoped by table privileges and two
+-- role-specific RLS policies. It has no BYPASSRLS attribute and cannot log in.
 DO $role$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auth_session_lookup_owner') THEN
-        CREATE ROLE auth_session_lookup_owner NOLOGIN BYPASSRLS;
+        CREATE ROLE auth_session_lookup_owner NOLOGIN NOBYPASSRLS;
     END IF;
 END
 $role$;
@@ -16,6 +15,8 @@ REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM auth_session_lookup_ow
 GRANT CREATE ON SCHEMA public TO auth_session_lookup_owner;
 GRANT SELECT (id, tenant_id, identity_id, refresh_token_hash, expires_at, revoked_at)
     ON TABLE public.auth_sessions TO auth_session_lookup_owner;
+CREATE POLICY auth_session_lookup_owner_read ON public.auth_sessions
+    FOR SELECT TO auth_session_lookup_owner USING (true);
 
 CREATE TABLE public.auth_session_lookup_audit (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -25,6 +26,8 @@ CREATE TABLE public.auth_session_lookup_audit (
 );
 ALTER TABLE public.auth_session_lookup_audit ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.auth_session_lookup_audit FORCE ROW LEVEL SECURITY;
+CREATE POLICY auth_session_lookup_audit_insert ON public.auth_session_lookup_audit
+    FOR INSERT TO auth_session_lookup_owner WITH CHECK (true);
 REVOKE ALL ON TABLE public.auth_session_lookup_audit FROM PUBLIC;
 
 GRANT INSERT ON TABLE public.auth_session_lookup_audit TO auth_session_lookup_owner;
