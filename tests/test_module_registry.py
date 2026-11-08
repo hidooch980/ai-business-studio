@@ -55,3 +55,18 @@ def test_planned_modules_never_appear_activatable():
     modules = _by_id(resolve_edition(Edition.ENTERPRISE))
     assert modules["sales"]["can_activate"] is False
     assert modules["sales"]["status"] == ModuleStatus.PLANNED.value
+
+
+
+def test_addon_with_unlicensed_dependency_is_not_activatable():
+    modules = _by_id(resolve_edition(Edition.STARTER, ("portals",)))
+    assert modules["portals"]["included_by_edition_or_addon"] is True
+    assert modules["portals"]["missing_dependency_entitlements"] == ["integrations"]
+    assert modules["portals"]["can_activate"] is False
+
+
+def test_foundation_module_can_activate_only_when_included_and_dependencies_satisfied():
+    modules = _by_id(resolve_edition(Edition.STARTER))
+    assert modules["catalog"]["can_activate"] is True
+    assert modules["platform"]["can_activate"] is True
+    assert modules["inventory"]["can_activate"] is True
