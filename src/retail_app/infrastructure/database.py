@@ -1,6 +1,6 @@
 """Tenant-aware PostgreSQL transaction boundary.
 
-The tenant ID must come from a trusted AccessContext, never directly from request input.
+The tenant and subject IDs must come from a trusted, database-backed AccessContext.
 """
 from __future__ import annotations
 
@@ -39,7 +39,32 @@ class PostgresDatabase:
     def transaction(self) -> Iterator[TransactionConnection]:
         """Yield one connection; commit on success and rollback on exception."""
         with self._connect() as connection, connection.transaction():
+            yield connection
+
+    @contextmanager
+    def tenant_transaction(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str | None = None,
+        expected_role: str | None = None,
+        expected_branch_ids: frozenset[str] | None = None,
+    ) -> Iterator[TransactionConnection]:
+        """Set transaction-local RLS context and revalidate current access state."""
+        if not tenant_id or not tenant_id.strip():
+            raise ValueError("trusted tenant_id is required")
+        with self.transaction() as connection:
+            connection.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (tenant_id,),
+            )
             if subject_id is not None:
+                if not subject_id.strip():
+                    raise ValueError("subject_id cannot be blank")
+                connection.execute(
+                    "SELECT set_config('app.subject_id', %s, true)",
+                    (subject_id,),
+                )
                 identity = connection.execute(
                     "SELECT is_active FROM identities WHERE id = %s",
                     (subject_id,),
@@ -74,27 +99,4 @@ class PostgresDatabase:
                     current_branches = frozenset(str(row[0]) for row in rows)
                     if current_branches != expected_branch_ids:
                         raise PermissionError("branch membership changed; re-authentication required")
-            yield connection
-
-    @contextmanager
-    def tenant_transaction(
-        self, *, tenant_id: str, subject_id: str | None = None,
-        expected_role: str | None = None,
-        expected_branch_ids: frozenset[str] | None = None,
-    ) -> Iterator[TransactionConnection]:
-        """Set RLS context and revalidate the live identity/membership per unit of work."""
-        if not tenant_id or not tenant_id.strip():
-            raise ValueError("trusted tenant_id is required")
-        with self.transaction() as connection:
-            connection.execute(
-                "SELECT set_config('app.tenant_id', %s, true)",
-                (tenant_id,),
-            )
-            if subject_id is not None:
-                if not subject_id.strip():
-                    raise ValueError("subject_id cannot be blank")
-                connection.execute(
-                    "SELECT set_config('app.subject_id', %s, true)",
-                    (subject_id,),
-                )
             yield connection
