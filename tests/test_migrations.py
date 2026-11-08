@@ -322,6 +322,40 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     finally:
         engine.dispose()
 
+    downgrade_moadian = subprocess.run(
+        [sys.executable, "-m", "alembic", "downgrade", "0018_proc_acct"],
+        check=False,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert downgrade_moadian.returncode == 0, (
+        f"alembic downgrade to 0018 failed:\\n{downgrade_moadian.stdout}\\n{downgrade_moadian.stderr}"
+    )
+    engine = build_engine(database_url)
+    try:
+        assert "moadian_connections" not in inspect(engine).get_table_names()
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0018_proc_acct"
+    finally:
+        engine.dispose()
+
+    reupgrade = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        check=False,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert reupgrade.returncode == 0, f"alembic re-upgrade failed:\\n{reupgrade.stdout}\\n{reupgrade.stderr}"
+    engine = build_engine(database_url)
+    try:
+        assert "moadian_connections" in inspect(engine).get_table_names()
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0019_moadian"
+    finally:
+        engine.dispose()
+
     downgrade = subprocess.run(
         [sys.executable, "-m", "alembic", "downgrade", "base"],
         check=False,
