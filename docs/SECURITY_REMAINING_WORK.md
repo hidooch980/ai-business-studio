@@ -3,7 +3,7 @@
 ## Scope and verified state
 
 Branch: `feat/db-session-bootstrap-resolver-2026-11`  
-Reviewed head at checkpoint: `211f7589a0eb178fba1b6c269d5d96015b84f27b`  
+Initial audit head: `211f7589a0eb178fba1b6c269d5d96015b84f27b` (subsequent session-management commits are on the same branch).  
 Pull request: #24 (open, Draft; do not merge as part of this work).
 
 The following files and boundaries were inspected:
