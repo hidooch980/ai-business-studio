@@ -86,9 +86,12 @@ tenant headers, role headers, or request-body claims.
 
 Migration 0005 is additive. To roll back the feature, first stop application
 traffic, then as schema owner revoke EXECUTE from the runtime role, drop
-`public.resolve_auth_session(bytea)`, revoke the column grants, and drop
-`auth_session_lookup_owner` only after confirming it owns no other objects.
-Do not drop or truncate existing session records as part of rollback. Restore
+`public.resolve_auth_session(bytea)`, drop the two role-specific policies,
+drop `auth_session_lookup_audit`, revoke the column and sequence grants, and
+drop `auth_session_lookup_owner` only after confirming it owns no other
+objects. Do not drop or truncate existing session records as part of rollback.
+Restore any pre-migration Runtime grants only after reviewing the prior
+privilege state; do not re-enable broad session-table reads by default. Restore
 from the verified backup only if schema rollback is insufficient. Production
 migration and rollback must be operator-reviewed; CI tests do not authorize
 production changes.
