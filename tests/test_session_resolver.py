@@ -138,3 +138,16 @@ def test_cookie_configuration_enforces_host_prefix_requirements():
             FakeDatabase(FakeConnection()),
             SessionCookieSettings(secure=False),
         )
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        SessionCookieSettings(httponly=False),
+        SessionCookieSettings(samesite="lax"),
+        SessionCookieSettings(path="/api"),
+    ],
+)
+def test_cookie_settings_reject_weak_browser_cookie_flags(settings):
+    with pytest.raises(ValueError):
+        PostgresSessionResolver(FakeDatabase(FakeConnection()), settings)
