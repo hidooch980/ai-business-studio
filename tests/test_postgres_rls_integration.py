@@ -789,7 +789,6 @@ def _live_session(token: str, *, expires: str = "1 day", revoked: bool = False):
 def _resolve_live(token: str):
     from starlette.requests import Request
 
-    from retail_app.api.session_resolver import PostgresSessionResolver
     from retail_app.infrastructure.database import PostgresDatabase
 
     request = Request({
@@ -1120,3 +1119,27 @@ def test_28_refresh_denies_membership_revocation_and_revokes_family():
                 "WHERE tenant_id = %s AND identity_id = %s",
                 (TENANT_A, USER_A),
             )
+
+def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
+    from fastapi.testclient import TestClient
+
+    from retail_app.api.app import create_app
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionService
+
+    database = PostgresDatabase(RUNTIME_URL)
+    issued = SessionService(database).issue(
+        tenant_id=str(TENANT_A), subject_id=str(USER_A)
+    )
+    client = TestClient(create_app(database), base_url="https://testserver")
+    client.cookies.set("__Host-retail_session", issued.refresh_token, secure=True)
+    headers = {"Origin": "https://testserver", "Sec-Fetch-Site": "same-origin"}
+    refreshed = client.post("/api/v1/auth/refresh", headers=headers)
+    assert refreshed.status_code == 204
+    rotated_token = client.cookies.get("__Host-retail_session")
+    assert rotated_token and rotated_token != issued.refresh_token
+    assert _resolve_live(rotated_token).subject_id == str(USER_A)
+    logged_out = client.post("/api/v1/auth/logout", headers=headers)
+    assert logged_out.status_code == 204
+    with pytest.raises(Exception):
+        _resolve_live(rotated_token)
