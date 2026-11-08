@@ -50,7 +50,9 @@ Sales, cash register, and POS remain out of scope. They may begin only after the
 - Migration `0002_transactional_infrastructure.sql`: tenant-scoped idempotency records, immutable domain events, transactional outbox, and append-only business audit events.
 - Migration `0003_suppliers_purchase_orders.sql`: tenant-scoped suppliers, branch-scoped purchase orders, and purchase-order lines.
 - Python infrastructure: PostgreSQL transaction boundary with transaction-local RLS context, ordered SQL migration runner with advisory locking, audit writer, domain-event/outbox writer, and canonical request hashing/idempotency reservation helpers.
-- Procurement domain: supplier and purchase-order value objects using integer minor currency units and milli-quantity precision.
+- Procurement domain: supplier and purchase-order value objects plus transactional application services for creating suppliers and draft purchase orders.
+- Purchase-order creation validates the supplier is active and checks the actor's assigned branch; supplier-directory writes are tenant-admin-only.
+- Both create flows persist the business record, audit entry, domain event, outbox message, and idempotency response in one database transaction.
 - Authorization: supplier and purchase-order permissions added to the existing deny-by-default role model. Branch managers may create/read orders; approval remains owner-admin only.
 - CI now includes pushes to `integration/**` so this work can be verified before a pull request is opened.
 
