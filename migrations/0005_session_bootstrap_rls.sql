@@ -4,7 +4,7 @@
 -- establish the normal RLS context. Runtime users get EXECUTE, never table access.
 BEGIN;
 
-GRANT CREATE ON SCHEMA public TO auth_bootstrap_owner;
+GRANT USAGE, CREATE ON SCHEMA public TO auth_bootstrap_owner;
 
 CREATE TABLE auth_session_bootstrap (
     token_hash bytea PRIMARY KEY,
