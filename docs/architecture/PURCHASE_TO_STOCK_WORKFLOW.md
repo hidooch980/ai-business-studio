@@ -71,3 +71,16 @@ This is an initial accounts-payable subledger workflow, not a complete bank/paym
 ### Verification targets
 
 The integration suite covers a purchase order through receipt, invoice matching, approval, AP posting, partial payment, idempotent replay, and final settlement. It also verifies cross-tenant supplier list isolation and rejection of tenant switching. Concurrent receipt behavior must be exercised against PostgreSQL with parallel transactions before production approval.
+
+
+## General-ledger integration (purchase accounting)
+
+| Event | Debit | Credit |
+|---|---|---|
+| Goods receipt | Inventory asset | Goods received not invoiced (GRNI) liability |
+| Approved supplier invoice posting | GRNI liability | Accounts payable liability |
+| Manual supplier payment record | Accounts payable liability | Cash/bank asset |
+
+The mappings are configured through GET/PUT /api/v1/procurement/accounting-settings. The four account codes must be distinct, active, tenant-owned, and of the expected account type. The configured base currency is authoritative for purchase-order line costs, invoice matching, receipts and payments. Posting uses the existing double-entry ledger, integer minor units, idempotency keys, audit records and open accounting-period checks. Procurement state changes and journal entries are committed in the same database transaction.
+
+The manual payment API records an accounting payment and does not initiate a bank transfer. A bank statement reconciliation or payment-provider integration is not included. Multi-currency/FX, tax, credit notes, landed-cost allocation and configurable variance tolerances remain out of scope for this increment.

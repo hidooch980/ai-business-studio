@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.catalog.models import Product
 from backend.app.db.session import get_db_session
+from backend.app.finance.ledger import AccountingPeriodConflictError, JournalConflictError, create_journal_entry
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_module
 from backend.app.identity.models import AuditEvent
 from backend.app.inventory.models import InventoryBalance, InventoryMovement, Warehouse
@@ -27,7 +28,13 @@ from backend.app.procurement.engine import (
     rank_supplier_quotes,
     transferable_quantity,
 )
-from backend.app.procurement.models import ProcurementReceipt, PurchaseOrder, PurchaseOrderLine, Supplier
+from backend.app.procurement.models import (
+    ProcurementAccountingSettings,
+    ProcurementReceipt,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    Supplier,
+)
 
 router = APIRouter(prefix="/procurement", tags=["smart-procurement"])
 Positive = Annotated[Decimal, Field(ge=0)]
@@ -334,6 +341,7 @@ def receive_purchase_order(
     db.add(receipt)
     try:
         db.flush()
+        receipt_total_minor = 0
         for received_line in payload.lines:
             line = db.scalar(select(PurchaseOrderLine).where(
                 PurchaseOrderLine.id == received_line.purchase_order_line_id,
@@ -398,6 +406,39 @@ def receive_purchase_order(
                 },
             )
             line.quantity_received += received_line.quantity
+            receipt_total_minor += received_line.quantity * line.unit_cost_minor
+        if receipt_total_minor > 0:
+            accounting = db.scalar(select(ProcurementAccountingSettings).where(
+                ProcurementAccountingSettings.tenant_id == principal.tenant.id
+            ))
+            if accounting is None:
+                raise HTTPException(status_code=409, detail="Procurement accounting settings must be configured before receiving goods")
+            if receipt_total_minor > 2_147_483_647:
+                raise HTTPException(status_code=409, detail="Receipt value exceeds the general-ledger integer limit")
+            create_journal_entry(
+                db,
+                tenant_id=principal.tenant.id,
+                actor_user_id=principal.user.id,
+                idempotency_key=f"procurement-receipt:{receipt.id}",
+                currency=accounting.base_currency,
+                description=f"Goods received for {order.order_number}"[:500],
+                posting_date=datetime.now(UTC).date(),
+                lines=[
+                    {
+                        "account_code": accounting.inventory_account_code,
+                        "memo": "Inventory received",
+                        "debit_minor": receipt_total_minor,
+                        "credit_minor": 0,
+                    },
+                    {
+                        "account_code": accounting.grni_account_code,
+                        "memo": "Goods received not invoiced",
+                        "debit_minor": 0,
+                        "credit_minor": receipt_total_minor,
+                    },
+                ],
+                commit=False,
+            )
         all_lines = db.scalars(select(PurchaseOrderLine).where(
             PurchaseOrderLine.tenant_id == principal.tenant.id,
             PurchaseOrderLine.purchase_order_id == order.id,
@@ -429,6 +470,9 @@ def receive_purchase_order(
                 "replayed": True,
             }
         raise HTTPException(status_code=409, detail="Receipt conflicts with existing inventory records") from exc
+    except (AccountingPeriodConflictError, JournalConflictError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except HTTPException:
         db.rollback()
         raise
