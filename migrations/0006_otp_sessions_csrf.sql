@@ -48,6 +48,10 @@ BEGIN
         RAISE EXCEPTION 'invalid OTP request' USING ERRCODE = '22023';
     END IF;
 
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended(encode(p_identifier_fingerprint, 'hex'), 0)
+    );
+
     IF (
         SELECT count(*) FROM public.otp_challenges
         WHERE identifier_fingerprint = p_identifier_fingerprint
