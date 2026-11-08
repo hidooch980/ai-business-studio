@@ -1,7 +1,12 @@
 import pytest
 
 from retail_app.security.authorization import (
-    AccessContext, AccessDenied, Permission, ResourceScope, Role, authorize,
+    AccessContext,
+    AccessDenied,
+    Permission,
+    ResourceScope,
+    Role,
+    authorize,
 )
 
 
