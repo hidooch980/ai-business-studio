@@ -18,7 +18,7 @@ def test_fastapi_host_mounts_authenticated_procurement_routes_once():
     )
     assert mounted is resolver
     assert app.state.session_resolver is resolver
-    paths = {route.path for route in app.routes}
+    paths = set(app.openapi()["paths"])
     assert "/api/procurement/purchase-orders" in paths
     assert "/api/procurement/suppliers" in paths
 
@@ -32,4 +32,4 @@ def test_app_factory_creates_fastapi_host_without_running_migrations():
     app = create_app(UnusedDatabase(), title="Test API")
     assert app.title == "Test API"
     assert isinstance(app.state.session_resolver, PostgresSessionResolver)
-    assert "/api/procurement/purchase-orders" in {route.path for route in app.routes}
+    assert "/api/procurement/purchase-orders" in set(app.openapi()["paths"])
