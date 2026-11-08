@@ -942,3 +942,40 @@ def test_21_real_postgres_cross_tenant_and_branch_revocation_are_denied():
                 (TENANT_A, USER_A),
             )
             admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
+
+def test_22_real_postgres_resolver_denies_inactive_branch_even_with_active_membership():
+    from secrets import token_urlsafe
+
+    from retail_app.infrastructure.database import PostgresDatabase
+
+    token = token_urlsafe(48)
+    session_id = _live_session(token)
+    database = PostgresDatabase(RUNTIME_URL)
+    try:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE tenant_memberships SET role = 'branch_manager' "
+                "WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+            admin.execute("UPDATE branches SET status = 'inactive' WHERE id = %s", (BRANCH_A,))
+        context = _resolve_live(token)
+        assert context.role.value == "branch_manager"
+        assert str(BRANCH_A) not in context.branch_ids
+        with pytest.raises(PermissionError, match="branch membership changed"):
+            with database.tenant_transaction(
+                tenant_id=context.tenant_id,
+                subject_id=context.subject_id,
+                expected_role=context.role.value,
+                expected_branch_ids=frozenset({str(BRANCH_A)}),
+            ):
+                pass
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute("UPDATE branches SET status = 'active' WHERE id = %s", (BRANCH_A,))
+            admin.execute(
+                "UPDATE tenant_memberships SET role = 'owner_admin' "
+                "WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+            admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
