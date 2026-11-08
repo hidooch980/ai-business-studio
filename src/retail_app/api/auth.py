@@ -36,16 +36,27 @@ def _set_session_cookies(response: Response, raw_token: str, csrf_token: str, tt
     )
 
 
+def _require_same_origin(request: Request) -> None:
+    origin = request.headers.get("Origin")
+    if not origin:
+        raise HTTPException(status_code=403, detail="Origin header required")
+    expected = f"{request.url.scheme}://{request.url.netloc}"
+    if origin.rstrip("/") != expected.rstrip("/"):
+        raise HTTPException(status_code=403, detail="cross-origin authentication request denied")
+
+
 def create_auth_router(service: AuthService, *, session_ttl_seconds: int = 2592000) -> APIRouter:
     router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
     @router.post("/otp/request", status_code=202)
-    def request_otp(body: OTPRequest) -> dict[str, str]:
+    def request_otp(body: OTPRequest, request: Request) -> dict[str, str]:
+        _require_same_origin(request)
         service.request_otp(body.identifier)
         return {"status": "accepted", "message": "If the account exists, a code has been sent."}
 
     @router.post("/otp/verify")
-    def verify_otp(body: OTPVerify, response: Response) -> dict[str, str]:
+    def verify_otp(body: OTPVerify, request: Request, response: Response) -> dict[str, str]:
+        _require_same_origin(request)
         raw_token, csrf_token = service.verify_otp(
             challenge_id=body.challenge_id,
             identifier=body.identifier,
