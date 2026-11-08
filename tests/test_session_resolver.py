@@ -42,6 +42,9 @@ def restricted_runtime_role():
         conn.execute(
             "GRANT EXECUTE ON FUNCTION public.resolve_auth_session(bytea) TO retail_session_runtime"
         )
+        conn.execute(
+            "GRANT INSERT ON security_audit_events TO retail_session_runtime"
+        )
         conn.execute("REVOKE ALL ON auth_sessions FROM retail_session_runtime")
         assert conn.execute(
             "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'retail_session_runtime'"
@@ -249,3 +252,28 @@ def test_session_lookup_audit_records_outcome_without_token_hash(auth_records):
     with psycopg.connect(RUNTIME_URL) as conn:
         with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
             conn.execute("SELECT * FROM auth_session_lookup_audit").fetchall()
+
+def test_membership_denial_is_written_to_tenant_security_audit(auth_records):
+    from fastapi import HTTPException
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        conn.execute(
+            "UPDATE tenant_memberships SET status = 'revoked' WHERE tenant_id = %s AND identity_id = %s",
+            (auth_records["tenant_id"], auth_records["subject_id"]),
+        )
+
+    with pytest.raises(HTTPException):
+        SessionResolver(PostgresDatabase(RUNTIME_URL))(_request(auth_records["token"]))
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        event = conn.execute(
+            """
+            SELECT event_type, outcome, subject_identity_id
+            FROM security_audit_events
+            WHERE tenant_id = %s AND subject_identity_id = %s
+            ORDER BY occurred_at DESC
+            LIMIT 1
+            """,
+            (auth_records["tenant_id"], auth_records["subject_id"]),
+        ).fetchone()
+    assert event == ("auth.session.denied", "denied", auth_records["subject_id"])
