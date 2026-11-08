@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """Fail-closed FastAPI mounting for authenticated procurement routes."""
 from __future__ import annotations
 
