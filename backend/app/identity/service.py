@@ -22,7 +22,6 @@ from backend.app.identity.models import (
     UserSession,
 )
 from backend.app.identity.permissions import PERMISSION_CATALOG
-from backend.app.modules.service import provision_tenant_modules
 from backend.app.identity.security import (
     hash_password,
     hash_session_token,
@@ -30,6 +29,7 @@ from backend.app.identity.security import (
     issue_session_token,
     verify_password,
 )
+from backend.app.modules.service import provision_tenant_modules
 
 
 class IdentityConflictError(ValueError):
