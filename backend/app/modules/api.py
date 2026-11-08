@@ -108,6 +108,7 @@ def list_tenant_modules(
                     and all(
                         entitlements.get(dependency)
                         and entitlements[dependency].is_entitled
+                        and entitlements[dependency].is_enabled
                         for dependency in _dependency_closure(definition.module_id)
                     )
                 ),
