@@ -300,8 +300,18 @@ def post_supplier_invoice(
             description=f"Supplier invoice {invoice.invoice_number} posted to accounts payable"[:500],
             posting_date=invoice.invoice_date,
             lines=[
-                {"account_code": accounting.grni_account_code, "memo": "Clear goods received not invoiced", "debit_minor": invoice.total_minor, "credit_minor": 0},
-                {"account_code": accounting.ap_account_code, "memo": "Supplier accounts payable", "debit_minor": 0, "credit_minor": invoice.total_minor},
+                {
+                    "account_code": accounting.grni_account_code,
+                    "memo": "Clear goods received not invoiced",
+                    "debit_minor": invoice.total_minor,
+                    "credit_minor": 0,
+                },
+                {
+                    "account_code": accounting.ap_account_code,
+                    "memo": "Supplier accounts payable",
+                    "debit_minor": 0,
+                    "credit_minor": invoice.total_minor,
+                },
             ],
             commit=False,
         )
@@ -397,8 +407,18 @@ def record_supplier_payment(
             description=f"Supplier payment {payload.payment_reference}"[:500],
             posting_date=payload.payment_date,
             lines=[
-                {"account_code": accounting.ap_account_code, "memo": "Settle supplier payable", "debit_minor": payload.amount_minor, "credit_minor": 0},
-                {"account_code": accounting.cash_account_code, "memo": "Cash or bank payment recorded", "debit_minor": 0, "credit_minor": payload.amount_minor},
+                {
+                    "account_code": accounting.ap_account_code,
+                    "memo": "Settle supplier payable",
+                    "debit_minor": payload.amount_minor,
+                    "credit_minor": 0,
+                },
+                {
+                    "account_code": accounting.cash_account_code,
+                    "memo": "Cash or bank payment recorded",
+                    "debit_minor": 0,
+                    "credit_minor": payload.amount_minor,
+                },
             ],
             commit=False,
         )
