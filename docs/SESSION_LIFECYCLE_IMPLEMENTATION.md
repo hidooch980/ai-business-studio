@@ -8,6 +8,8 @@
 - `SessionService.revoke()` and the HTTP logout endpoint revoke the presented session.
 - `POST /api/v1/auth/refresh` rotates the secure `__Host-retail_session` cookie.
 - `POST /api/v1/auth/logout` revokes the current cookie session and clears the cookie.
+- `GET /api/v1/auth/sessions` lists up to 50 unexpired sessions belonging only to the authenticated subject; the current session is marked without exposing token digests.
+- `DELETE /api/v1/auth/sessions/{session_id}` revokes one session belonging to the authenticated subject, revalidates the current session in the same tenant transaction, records an audit event and clears the cookie when the current session is selected.
 - Refresh/logout require a matching Origin and reject cross-site Fetch Metadata.
 - Migration `0006_refresh_token_families.sql` adds family tracking and preserves existing sessions by assigning each a family ID.
 - Migration `0007_security_audit_immutability.sql` makes session security audit records append-only and restricts reads to tenant owner/admin identities.
@@ -27,7 +29,7 @@ The approved product security design specifies phone/email OTP as the primary si
 
 ## Remaining acceptance gates
 1. Implement OTP verification and only then expose login/session issuance over HTTP.
-2. Add logout-all HTTP route and session inventory/revocation UI; the internal revoke-all service primitive exists.
+2. Add a purpose-bound step-up proof and then expose logout-all over HTTP; build the client session-management UI. Session inventory and selected-session revocation APIs now exist but require staging acceptance.
 3. Run PostgreSQL 16 CI and verify all concurrency tests pass.
 4. Deploy to a disposable staging environment and perform browser-level refresh/logout and service-worker update tests.
 5. Conduct independent security review before production activation.
