@@ -51,7 +51,7 @@ app = create_app(PostgresDatabase(os.environ["DATABASE_URL"]))
 The session cookie must be opaque, random, at least 32 characters, and set by
 the future login service with Secure, HttpOnly, SameSite=Strict and Path=/.
 The `__Host-` prefix additionally requires Secure and no Domain attribute.
-The resolver accepts only that cookie; it does not accept bearer tokens,
+The resolver validates expiry and revocation using PostgreSQL's clock, records those outcomes, and accepts only that cookie; it does not accept bearer tokens,
 tenant headers, role headers, or request-body claims.
 
 ## Important limitations
