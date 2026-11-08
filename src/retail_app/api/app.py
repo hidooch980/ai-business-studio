@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from retail_app.api.authenticated_host import mount_authenticated_procurement_routes
+from retail_app.api.session_routes import create_session_router
 
 
 def create_app(database: Any, *, title: str = "AI Smart Retail API") -> FastAPI:
@@ -16,4 +17,5 @@ def create_app(database: Any, *, title: str = "AI Smart Retail API") -> FastAPI:
     """
     app = FastAPI(title=title)
     mount_authenticated_procurement_routes(app, database)
+    app.include_router(create_session_router(database))
     return app
