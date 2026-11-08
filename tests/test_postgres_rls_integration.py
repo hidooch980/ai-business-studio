@@ -1014,11 +1014,8 @@ def test_23_session_revocation_between_resolution_and_transaction_is_denied():
             admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
 
 def test_24_session_service_issues_and_rotates_single_use_refresh_tokens():
-    from secrets import token_urlsafe
-
     from fastapi import HTTPException
 
-    from retail_app.api.session_resolver import PostgresSessionResolver
     from retail_app.infrastructure.database import PostgresDatabase
     from retail_app.security.session_service import SessionService
 
@@ -1040,7 +1037,6 @@ def test_24_session_service_issues_and_rotates_single_use_refresh_tokens():
 def test_25_refresh_token_replay_revokes_the_entire_session_family():
     from fastapi import HTTPException
 
-    from retail_app.api.session_resolver import PostgresSessionResolver
     from retail_app.infrastructure.database import PostgresDatabase
     from retail_app.security.session_service import RefreshTokenReplayError, SessionService
 
