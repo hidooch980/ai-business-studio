@@ -1134,9 +1134,12 @@ def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
         tenant_id=str(TENANT_A), subject_id=str(USER_A)
     )
     client = TestClient(create_app(database), base_url="https://testserver")
-    client.cookies.set("__Host-retail_session", issued.refresh_token, domain="testserver", path="/")
     headers = {"Origin": "https://testserver", "Sec-Fetch-Site": "same-origin"}
-    refreshed = client.post("/api/v1/auth/refresh", headers=headers)
+    refreshed = client.post(
+        "/api/v1/auth/refresh",
+        headers=headers,
+        cookies={"__Host-retail_session": issued.refresh_token},
+    )
     assert refreshed.status_code == 204
     set_cookie = refreshed.headers.get("set-cookie", "").lower()
     assert "secure" in set_cookie and "httponly" in set_cookie and "samesite=strict" in set_cookie
