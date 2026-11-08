@@ -40,8 +40,13 @@ def postgres_schema():
             "CREATE ROLE retail_runtime LOGIN PASSWORD 'runtime-test-only' "
             "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS"
         )
-        for migration in MIGRATIONS:
-            conn.execute(migration.read_text(encoding="utf-8"))
+        from retail_app.infrastructure.migrations import apply_migrations
+
+        assert apply_migrations(DATABASE_URL, ROOT / "migrations") == [
+            "0001_identity_security.sql",
+            "0002_transactional_infrastructure.sql",
+            "0003_suppliers_purchase_orders.sql",
+        ]
         conn.execute("GRANT USAGE ON SCHEMA public TO retail_runtime")
         conn.execute(
             "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO retail_runtime"
