@@ -99,3 +99,33 @@ revocation, inactive identity, revoked/suspended membership, role changes,
 cross-tenant access, branch membership removal, transaction rollback consistency,
 connection-pool context reset, and proof that retail_runtime cannot SELECT the
 bootstrap table or bypass RLS. The migration must run only in ephemeral CI.
+
+
+## Python and FastAPI integration
+
+- `retail_app.api.session_resolver.PostgresSessionResolver` reads only the
+  `__Host-retail_session` cookie, validates its bounded URL-safe token shape,
+  computes SHA-256 in the server and calls the narrow bootstrap function.
+- After setting transaction-local tenant/subject values, it re-reads the
+  authoritative session row under session RLS, then checks active identity,
+  active tenant, active membership and current role. Active branch memberships
+  are loaded from PostgreSQL; no role or branch claim is accepted from the
+  browser.
+- `retail_app.api.authenticated_host.mount_authenticated_procurement_routes`
+  mounts the procurement router with this resolver as the dependency.
+- Every procurement unit-of-work revalidates identity, tenant and active
+  membership inside its own transaction. It compares the current database role
+  with the role snapshot used for authorization and, for branch managers and
+  employees, compares the active branch set again. A membership/role/branch
+  change between dependency resolution and the business transaction fails
+  closed. RLS settings are transaction-local and connection-per-transaction.
+- Cookie issuance, refresh rotation, logout/revocation endpoints, CSRF policy
+  for non-idempotent browser writes, and a complete standalone FastAPI app
+  lifecycle are not implemented by this resolver change. The host adapter
+  mounts the existing procurement routes only. A session issuer must generate
+  cryptographically random URL-safe tokens and set Secure, HttpOnly,
+  SameSite=Strict, Path=/ cookie attributes; the resolver never creates or
+  returns a cookie.
+- The default `__Host-` cookie name requires HTTPS and Secure. Local HTTP
+  development must use a separately configured non-Host cookie name and must
+  never be enabled in production.
