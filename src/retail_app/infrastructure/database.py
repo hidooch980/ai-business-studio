@@ -62,6 +62,13 @@ class PostgresDatabase:
                 "SELECT set_config('app.tenant_id', %s, true)",
                 (tenant_id,),
             )
+            if subject_id is not None:
+                if not subject_id.strip():
+                    raise ValueError("subject_id cannot be blank")
+                connection.execute(
+                    "SELECT set_config('app.subject_id', %s, true)",
+                    (subject_id,),
+                )
             if session_id is not None and session_token_hash is not None:
                 session = connection.execute(
                     """
@@ -76,12 +83,6 @@ class PostgresDatabase:
                 if session is None:
                     raise PermissionError("session is inactive or revoked")
             if subject_id is not None:
-                if not subject_id.strip():
-                    raise ValueError("subject_id cannot be blank")
-                connection.execute(
-                    "SELECT set_config('app.subject_id', %s, true)",
-                    (subject_id,),
-                )
                 identity = connection.execute(
                     "SELECT is_active FROM identities WHERE id = %s FOR SHARE",
                     (subject_id,),
