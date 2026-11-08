@@ -11,6 +11,7 @@ from backend.app.identity import models as identity_models  # noqa: F401
 from backend.app.inventory import models as inventory_models  # noqa: F401
 from backend.app.outbox import models as outbox_models  # noqa: F401
 from backend.app.procurement import models as procurement_models  # noqa: F401
+from backend.app.procurement import models as payables_models  # noqa: F401
 
 # Import model modules here as domain models are introduced.
 target_metadata = Base.metadata
