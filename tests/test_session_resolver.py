@@ -56,6 +56,8 @@ def auth_records():
     tenant_id, branch_one, branch_two, subject_id, session_id = [uuid4() for _ in range(5)]
     token = f"test-session-{uuid4().hex}-{uuid4().hex}"
     token_hash = hashlib.sha256(token.encode()).digest()
+    csrf_token = f"csrf-{uuid4().hex}-{uuid4().hex}"
+    csrf_hash = hashlib.sha256(csrf_token.encode()).digest()
     with psycopg.connect(DATABASE_URL) as conn:
         conn.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Resolver tenant')", (tenant_id,))
         conn.execute(
@@ -77,10 +79,10 @@ def auth_records():
         conn.execute(
             """
             INSERT INTO auth_sessions
-                (id, tenant_id, identity_id, refresh_token_hash, expires_at)
-            VALUES (%s, %s, %s, %s, now() + interval '1 hour')
+                (id, tenant_id, identity_id, refresh_token_hash, csrf_token_hash, expires_at)
+            VALUES (%s, %s, %s, %s, %s, now() + interval '1 hour')
             """,
-            (session_id, tenant_id, subject_id, token_hash),
+            (session_id, tenant_id, subject_id, token_hash, csrf_hash),
         )
     return {
         "tenant_id": tenant_id,
@@ -90,6 +92,7 @@ def auth_records():
         "session_id": session_id,
         "token": token,
         "token_hash": token_hash,
+        "csrf_token": csrf_token,
     }
 
 
