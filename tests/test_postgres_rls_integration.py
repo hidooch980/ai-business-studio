@@ -148,7 +148,7 @@ def test_1_migration_applies_and_forces_rls_on_all_scoped_tables():
             WHERE c.relname IN (
                 'tenants', 'branches', 'identities', 'tenant_memberships',
                 'branch_memberships', 'auth_sessions', 'otp_challenges',
-                'security_audit_events', 'idempotency_records', 'domain_events',
+                'security_audit_events', 'auth_session_lookup_audit', 'idempotency_records', 'domain_events',
                 'outbox_messages', 'audit_events', 'suppliers', 'purchase_orders',
                 'purchase_order_lines', 'goods_receipts', 'goods_receipt_lines',
                 'inventory_movements', 'supplier_invoices', 'supplier_invoice_lines', 'accounts_payable',
@@ -156,7 +156,7 @@ def test_1_migration_applies_and_forces_rls_on_all_scoped_tables():
             )
             """
         ).fetchall()
-    assert len(rows) == 24
+    assert len(rows) == 25
     assert all(forced for _, forced in rows)
 
 
