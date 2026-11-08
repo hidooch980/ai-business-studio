@@ -21,9 +21,6 @@ def test_fastapi_host_mounts_authenticated_procurement_routes_once():
     paths = set(app.openapi()["paths"])
     assert "/api/procurement/purchase-orders" in paths
     assert "/api/procurement/suppliers" in paths
-    assert "/api/v1/auth/sessions" in paths
-    assert "/api/v1/auth/sessions/{session_id}" in paths
-
     route_count = len(app.routes)
     assert mount_authenticated_procurement_routes(app, UnusedDatabase()) is resolver
     assert len(app.routes) == route_count
@@ -37,3 +34,4 @@ def test_app_factory_creates_fastapi_host_without_running_migrations():
     paths = set(app.openapi()["paths"])
     assert "/api/procurement/purchase-orders" in paths
     assert "/api/v1/auth/sessions" in paths
+    assert "/api/v1/auth/sessions/{session_id}" in paths
