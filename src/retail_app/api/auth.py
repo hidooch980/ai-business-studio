@@ -51,8 +51,12 @@ def create_auth_router(service: AuthService, *, session_ttl_seconds: int = 25920
     @router.post("/otp/request", status_code=202)
     def request_otp(body: OTPRequest, request: Request) -> dict[str, str]:
         _require_same_origin(request)
-        service.request_otp(body.identifier)
-        return {"status": "accepted", "message": "If the account exists, a code has been sent."}
+        challenge_id = service.request_otp(body.identifier)
+        return {
+            "status": "accepted",
+            "challenge_id": str(challenge_id),
+            "message": "If the account exists, a code has been sent.",
+        }
 
     @router.post("/otp/verify")
     def verify_otp(body: OTPVerify, request: Request, response: Response) -> dict[str, str]:
