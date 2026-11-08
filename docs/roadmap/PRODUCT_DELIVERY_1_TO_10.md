@@ -191,3 +191,19 @@ The comprehensive target architecture, domain boundaries, cross-module invariant
 Demand-driven procurement scope, calculation rules, controls, lifecycle, dashboards, and acceptance criteria are detailed in [SMART_PROCUREMENT.md](../architecture/SMART_PROCUREMENT.md).
 
 These blueprints are approved scope only. The checkboxes and stage statuses above remain the execution ledger; do not mark any capability complete until its implementation, migrations, tests, CI evidence, and operational acceptance exist on the same commit.
+
+
+## 0.1 Tenant subscription and module activation
+Status: **Implemented in feature branch; awaiting CI/review**
+
+- [x] Persist one subscription per tenant and per-module entitlements.
+- [x] Provision Starter on new tenant registration and backfill existing tenants.
+- [x] Add tenant-scoped module list, edition change and module enable/disable endpoints.
+- [x] Enforce RBAC, CSRF, subscription status, module lifecycle and transitive dependencies.
+- [x] Preserve historical data on edition downgrade/module disable.
+- [x] Apply module enforcement to the smart procurement preview endpoint.
+- [ ] Apply entitlement checks to every future API route, background worker and integration.
+- [ ] Implement paid add-on checkout, payment verification, renewal, expiry and proration.
+- [ ] Add admin UI for subscription and module management.
+
+Details: `docs/architecture/TENANT_MODULE_MANAGEMENT.md`.
