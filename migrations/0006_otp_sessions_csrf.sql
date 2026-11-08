@@ -37,7 +37,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $function$
 DECLARE
-    matched_identity public.identities%ROWTYPE;
+    matched_identity_id uuid;
     destination text;
 BEGIN
     IF p_challenge_id IS NULL
@@ -63,17 +63,15 @@ BEGIN
     END IF;
 
     IF p_channel = 'sms' THEN
-        SELECT i.* INTO matched_identity
+        SELECT i.id, i.phone_e164 INTO matched_identity_id, destination
         FROM public.identities AS i
         WHERE i.phone_e164 = p_identifier AND i.is_active
         LIMIT 1;
-        destination := matched_identity.phone_e164;
     ELSE
-        SELECT i.* INTO matched_identity
+        SELECT i.id, i.email INTO matched_identity_id, destination
         FROM public.identities AS i
         WHERE lower(i.email) = lower(p_identifier) AND i.is_active
         LIMIT 1;
-        destination := matched_identity.email;
     END IF;
 
     UPDATE public.otp_challenges
@@ -86,7 +84,7 @@ BEGIN
         purpose, channel, expires_at, resend_after
     ) VALUES (
         p_challenge_id,
-        CASE WHEN FOUND THEN matched_identity.id ELSE NULL END,
+        matched_identity_id,
         p_identifier_fingerprint, p_code_hmac, 'login', p_channel,
         clock_timestamp() + interval '5 minutes',
         clock_timestamp() + interval '60 seconds'
