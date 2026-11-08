@@ -8,7 +8,8 @@ declare const __BUILD_ID__: string;
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    const workerUrl = new URL("/sw.js", window.location.origin);
+    const appBaseUrl = new URL(import.meta.env.BASE_URL, document.baseURI);
+    const workerUrl = new URL("sw.js", appBaseUrl);
     workerUrl.searchParams.set("v", `${__APP_VERSION__}-${__BUILD_ID__}`);
     let reloading = false;
 
@@ -18,7 +19,7 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
       window.location.reload();
     });
 
-    navigator.serviceWorker.register(workerUrl, { scope: "./", updateViaCache: "none" })
+    navigator.serviceWorker.register(workerUrl, { scope: appBaseUrl.pathname, updateViaCache: "none" })
       .then((registration) => {
         const checkForUpdate = () => {
           if (document.visibilityState === "visible") {
