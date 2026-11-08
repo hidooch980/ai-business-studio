@@ -17,6 +17,7 @@ from backend.app.procurement.engine import (
 
 router = APIRouter(prefix="/procurement", tags=["smart-procurement"])
 Positive = Annotated[Decimal, Field(ge=0)]
+StrictlyPositive = Annotated[Decimal, Field(gt=0)]
 NonEmpty = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 
@@ -57,8 +58,8 @@ class ProcurementPreviewRequest(BaseModel):
     lead_time_days: int = Field(ge=0, le=365)
     review_period_days: int = Field(default=7, ge=0, le=365)
     service_level: Decimal = Field(default=Decimal("0.95"), gt=0, lt=1)
-    minimum_order_quantity: Positive = Decimal("1")
-    order_multiple: Positive = Decimal("1")
+    minimum_order_quantity: StrictlyPositive = Decimal("1")
+    order_multiple: StrictlyPositive = Decimal("1")
     shelf_life_days: int | None = Field(default=None, gt=0, le=36500)
     storage_capacity_units: Positive | None = None
     budget_minor: int | None = Field(default=None, ge=0)
@@ -96,6 +97,7 @@ def preview_replenishment(
         shelf_life_days=payload.shelf_life_days,
         storage_capacity_units=payload.storage_capacity_units,
         budget_minor=payload.budget_minor,
+        supplier_capacity_units=chosen.capacity_units if chosen else None,
     )
     result = calculate_replenishment(
         data,
