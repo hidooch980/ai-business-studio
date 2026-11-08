@@ -4,6 +4,8 @@
 -- establish the normal RLS context. Runtime users get EXECUTE, never table access.
 BEGIN;
 
+GRANT CREATE ON SCHEMA public TO auth_bootstrap_owner;
+
 CREATE TABLE auth_session_bootstrap (
     token_hash bytea PRIMARY KEY,
     session_id uuid NOT NULL UNIQUE,
@@ -65,6 +67,7 @@ AS $fn$
 $fn$;
 ALTER FUNCTION resolve_auth_session_bootstrap(bytea) OWNER TO auth_bootstrap_owner;
 REVOKE ALL ON FUNCTION resolve_auth_session_bootstrap(bytea) FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM auth_bootstrap_owner;
 GRANT EXECUTE ON FUNCTION resolve_auth_session_bootstrap(bytea) TO retail_runtime;
 
 COMMIT;
