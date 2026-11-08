@@ -1,29 +1,49 @@
 # Session authentication and database access
 
-## Current implementation boundary
+## Implemented authentication lifecycle
 
-Migration `0005_restricted_session_lookup.sql` adds a single-purpose PostgreSQL
-function for locating a session by SHA-256 token hash before tenant context is
-known. The function is `SECURITY DEFINER`, has a fixed search path, returns no
-token hash, and is executable only by the configured runtime role.
+Migrations `0005_restricted_session_lookup.sql` and
+`0006_otp_sessions_csrf.sql` add a restricted pre-tenant session lookup,
+OTP challenge functions, a CSRF digest on each session, and narrowly scoped
+permissions. The `auth_session_lookup_owner` role is NOLOGIN and NOBYPASSRLS.
+It can read only the required session and identity columns and access OTP
+challenge rows through role-specific RLS policies. It cannot read tenant
+business data, finance or procurement data. Runtime is not a member of this
+owner role.
 
-The function owner is a NOLOGIN role without BYPASSRLS. A role-specific RLS
-policy permits it to SELECT only the six required columns of `auth_sessions`;
-a second role-specific policy permits INSERT only into
-`auth_session_lookup_audit`. It cannot read that audit table and has no
-privileges on identities, tenants, memberships, finance, procurement, or other
-tables. Runtime is not a member of that owner role and must not be granted
-membership in it.
+The OTP service:
+- Generates a cryptographically random six-digit code and stores only an
+  HMAC digest bound to the challenge ID.
+- Uses an HMAC fingerprint for the identifier, a five-minute expiry, a
+  60-second resend delay, at most five requests per hour, and at most five
+  failed verification attempts per challenge.
+- Serializes rate-limit checks per identifier with a transaction advisory lock.
+- Returns the same public acceptance response for known and unknown identifiers.
+- Requires an injected SMS/email delivery adapter; no provider credentials or
+  production delivery integration are included in this repository.
 
-The lookup function checks revocation and expiry using PostgreSQL's clock and
-records `matched`, `unknown`, `expired`, or `revoked` outcomes without
-storing token material. After a valid lookup, the application opens a separate
-transaction using the ordinary runtime role, sets transaction-local
-`app.tenant_id` and `app.subject_id`, and loads active identity, tenant
-membership, role and active branch memberships under existing forced RLS
-policies. Successful and denied membership resolution is recorded in the
-tenant-scoped `security_audit_events` table. Client-supplied tenant, role,
-subject and branch values are never consulted.
+Successful verification checks active identity, tenant and membership using
+trusted database records, then issues a random opaque session token and a
+separate random CSRF token. Only SHA-256 digests are persisted. The session
+cookie is Secure, HttpOnly, SameSite=Strict and Path=/; the CSRF cookie is
+Secure, readable by the client, SameSite=Strict and Path=/.
+
+Session rotation revokes the current session and creates a linked successor in
+one tenant-scoped transaction. Logout revokes the current session and clears
+both cookies. Login, rotation, logout and session-resolution outcomes are
+written to audit records.
+
+For unsafe authenticated methods, the resolver requires the CSRF cookie and
+`X-CSRF-Token` header to match, and verifies the supplied token against the
+digest returned by the restricted SECURITY DEFINER lookup. Runtime never gets
+direct SELECT access to `auth_sessions`. OTP request and verification routes
+also require an exact same-origin `Origin` header.
+
+After session lookup, the application opens a separate transaction using the
+ordinary runtime role, sets transaction-local `app.tenant_id` and
+`app.subject_id`, and loads active identity, tenant membership, role and
+active branch memberships under forced RLS. Client-supplied tenant, role,
+subject and branch claims are never trusted.
 
 ## Runtime role provisioning
 
@@ -39,9 +59,11 @@ GRANT USAGE ON SCHEMA public TO retail_runtime;
 ```
 
 Apply numbered migrations using a separate schema-owner connection. Migration
-0005 grants the runtime role EXECUTE on the lookup function and revokes direct
-SELECT on `auth_sessions`. Grant only the business-table privileges required
-by the deployed application; do not use blanket table grants in production.
+0005 grants execution of the restricted session lookup and revokes direct
+SELECT on `auth_sessions`. Migration 0006 adds OTP and CSRF operations and
+grants only the required runtime functions and session write permissions.
+Production grants must remain narrow; do not copy the blanket grants used by
+the disposable CI database.
 
 ## FastAPI wiring
 
@@ -54,53 +76,50 @@ export DATABASE_URL="postgresql://retail_runtime:<managed-secret>@<db-host>:5432
 uvicorn retail_app.main:app --host 0.0.0.0 --port 8000
 ```
 
-The equivalent factory remains available for embedding:
+The factory can mount OTP routes when an `AuthService` is supplied with an
+SMS/email delivery implementation:
 
 ```python
 from retail_app.api.host import create_app
 from retail_app.infrastructure.database import PostgresDatabase
+from retail_app.security.auth_service import AuthService
 
-app = create_app(PostgresDatabase(os.environ["DATABASE_URL"]))
+database = PostgresDatabase(runtime_dsn)
+auth = AuthService(database, otp_hmac_secret=secret_bytes, otp_delivery=delivery_adapter)
+app = create_app(database, auth_service=auth)
 ```
 
-The session cookie must be opaque, random, at least 32 characters, and set by
-the future login service with Secure, HttpOnly, SameSite=Strict and Path=/.
-The `__Host-` prefix additionally requires Secure and no Domain attribute.
-The resolver validates expiry and revocation using PostgreSQL's clock, records those outcomes, and accepts only that cookie; it does not accept bearer tokens,
-tenant headers, role headers, or request-body claims.
+The default executable entrypoint intentionally does not configure a delivery
+provider or OTP secret; therefore it does not expose OTP routes until the
+operator supplies those dependencies through the host factory. Do not place
+provider credentials or HMAC secrets in source control.
 
-## Important limitations
+## Remaining production gates
 
-- This is a session validator and FastAPI host integration, not a complete
-  authentication product.
-- OTP challenge verification, delivery providers, login throttling, session
-  creation, refresh rotation, logout endpoint, CSRF strategy for state-changing
-  cookie-authenticated requests, and recovery flows remain unimplemented.
-- The current database column is named `refresh_token_hash`; the resolver uses
-  it as the opaque session cookie credential. Rename/rework this schema when
-  the access/refresh-token lifecycle is implemented, before production.
-- Do not deploy this host until cookie issuance, CSRF protection, rate limiting,
-  audit persistence, and a full security review are complete.
+- No SMS/email provider adapter, provider credentials, delivery retry queue or
+  delivery observability are configured. OTP routes are opt-in through host
+  dependency injection.
+- Identifier recovery, multi-factor step-up, device management, session
+  inventory/revoke-all, refresh-token reuse-family invalidation, and account
+  recovery workflows are not included.
+- The database column is still named `refresh_token_hash`; it currently stores
+  the hash of the opaque session cookie. A dedicated access/session token
+  schema should replace this legacy name before production.
+- Same-origin checks require an exact `Origin` header; deployment behind a
+  reverse proxy must preserve the correct external scheme and host.
+- Do not deploy until a real delivery adapter is configured, provider
+  credentials are stored in a secret manager, CI passes on the final commit,
+  and an independent security review is complete.
 
-## Install, migrate, rollback and recovery
+## Migration and recovery boundary
 
-1. Back up the database and verify a restore to a separate database.
-2. Create the runtime role as above; keep the schema-owner DSN separate.
-3. Apply migrations with the repository migration runner and schema-owner DSN.
-4. Deploy the application with the restricted runtime DSN.
-5. Verify the runtime role cannot directly SELECT from `auth_sessions`, cannot
-   SET ROLE to `auth_session_lookup_owner`, and can execute only the session
-   lookup function.
-6. Run the PostgreSQL integration tests and the application health check.
+No operational database migration has been run and no deployment has been
+performed. CI applies migrations only to an ephemeral PostgreSQL service.
+Production migration and rollback require a separate operator-reviewed change.
 
-Migration 0005 is additive. To roll back the feature, first stop application
-traffic, then as schema owner revoke EXECUTE from the runtime role, drop
-`public.resolve_auth_session(bytea)`, drop the two role-specific policies,
-drop `auth_session_lookup_audit`, revoke the column and sequence grants, and
-drop `auth_session_lookup_owner` only after confirming it owns no other
-objects. Do not drop or truncate existing session records as part of rollback.
-Restore any pre-migration Runtime grants only after reviewing the prior
-privilege state; do not re-enable broad session-table reads by default. Restore
-from the verified backup only if schema rollback is insufficient. Production
-migration and rollback must be operator-reviewed; CI tests do not authorize
-production changes.
+For rollback, first stop application traffic, revoke runtime EXECUTE on the
+new OTP/session functions, remove only the newly added policies/functions and
+CSRF column after confirming no active application depends on them, and retain
+existing session records. Do not drop or truncate existing authentication
+records as part of rollback. Restore from a verified backup only if schema
+rollback is insufficient.
