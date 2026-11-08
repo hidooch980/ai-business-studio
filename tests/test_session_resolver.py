@@ -3,8 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from uuid import UUID
 
-import pytest
 from fastapi import HTTPException
+import pytest
 
 from retail_app.api.session_resolver import PostgresSessionResolver, SessionCookieSettings
 from retail_app.security.authorization import Role
