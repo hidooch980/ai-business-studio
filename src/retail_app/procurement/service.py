@@ -45,7 +45,8 @@ def create_supplier(
     }
     operation = "procurement.supplier.create"
     with database.tenant_transaction(
-        tenant_id=context.tenant_id, subject_id=context.subject_id
+        tenant_id=context.tenant_id, subject_id=context.subject_id,
+        expected_role=context.role.value, expected_branch_ids=context.branch_ids,
     ) as connection:
         cached = reserve_idempotency(
             connection, tenant_id=context.tenant_id, operation=operation,
@@ -131,7 +132,8 @@ def create_purchase_order(
     }
     operation = "procurement.purchase_order.create"
     with database.tenant_transaction(
-        tenant_id=context.tenant_id, subject_id=context.subject_id
+        tenant_id=context.tenant_id, subject_id=context.subject_id,
+        expected_role=context.role.value, expected_branch_ids=context.branch_ids,
     ) as connection:
         cached = reserve_idempotency(
             connection, tenant_id=context.tenant_id, operation=operation,
