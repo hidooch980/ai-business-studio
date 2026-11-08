@@ -296,7 +296,7 @@ def receive_goods(database: Any, context: AccessContext, order_id: str, *,
             if po_line is None:
                 raise ValueError("receipt references an unknown purchase-order line")
             prior = conn.execute(
-                """SELECT COALESCE(SUM(grl.received_quantity_milli), 0)
+                """SELECT COALESCE(SUM(grl.accepted_quantity_milli), 0)
                    FROM goods_receipt_lines grl
                    JOIN goods_receipts gr ON gr.tenant_id = grl.tenant_id AND gr.id = grl.goods_receipt_id
                    WHERE grl.tenant_id = %s AND grl.purchase_order_id = %s
