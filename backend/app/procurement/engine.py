@@ -54,6 +54,7 @@ class ReplenishmentInput:
     shelf_life_days: int | None = None
     storage_capacity_units: Decimal | None = None
     budget_minor: int | None = None
+    supplier_capacity_units: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,8 @@ def calculate_replenishment(data: ReplenishmentInput, landed_unit_cost_minor: in
         raise ValueError("service level must be between 0 and 1")
     if data.sellable_on_hand < 0 or data.reserved_units < 0 or data.confirmed_inbound < 0 or data.backordered_units < 0:
         raise ValueError("inventory quantities cannot be negative")
+    if data.supplier_capacity_units is not None and data.supplier_capacity_units < 0:
+        raise ValueError("supplier capacity cannot be negative")
 
     forecast, demand_stddev, confidence = forecast_daily_demand(data.demand_history)
     z = min(_SERVICE_Z.items(), key=lambda item: abs(item[0] - data.service_level))[1]
@@ -123,6 +126,8 @@ def calculate_replenishment(data: ReplenishmentInput, landed_unit_cost_minor: in
         if data.storage_capacity_units < 0:
             raise ValueError("storage capacity cannot be negative")
         raw_need = min(raw_need, max(D("0"), data.storage_capacity_units - data.sellable_on_hand))
+    if data.supplier_capacity_units is not None:
+        raw_need = min(raw_need, data.supplier_capacity_units)
 
     quantity = D("0") if raw_need == 0 else max(data.minimum_order_quantity, _ceil_to_multiple(raw_need, data.order_multiple))
     if landed_unit_cost_minor and data.budget_minor is not None:
