@@ -894,3 +894,36 @@ def test_postgres_prevents_concurrent_supplier_overpayment(
         assert saved_invoice.paid_minor == 800
         assert len(payments) == 2
         assert len(journals) == 2
+
+
+def test_moadian_connection_profiles_are_tenant_scoped(purchasing_client: TestClient) -> None:
+    _, tenant_a_headers = _register_growth(purchasing_client, "-moadian-a")
+    configured = purchasing_client.put(
+        "/api/v1/tax/moadian/connections",
+        json={
+            "tax_memory_uid": "MEMORY_SHARED_001",
+            "taxpayer_identifier": "12345678901",
+            "submission_mode": "tsp",
+            "provider_code": "licensed-tsp",
+            "environment": "sandbox",
+            "provider_credential_secret_ref": "secret://tenant-a/moadian/tsp-token",
+            "is_enabled": True,
+        },
+        headers=tenant_a_headers,
+    )
+    assert configured.status_code == 200, configured.text
+    connection_id = configured.json()["id"]
+    assert configured.json()["credentials_configured"] is True
+    assert "secret://" not in str(configured.json())
+
+    with TestClient(purchasing_client.app) as tenant_b_client:
+        tenant_b_client.headers.update({"Origin": str(tenant_b_client.base_url).rstrip("/")})
+        _, tenant_b_headers = _register_growth(tenant_b_client, "-moadian-b")
+        visible = tenant_b_client.get("/api/v1/tax/moadian/connections", headers=tenant_b_headers)
+        assert visible.status_code == 200, visible.text
+        assert visible.json()["items"] == []
+        foreign_disable = tenant_b_client.post(
+            f"/api/v1/tax/moadian/connections/{connection_id}/disable",
+            headers=tenant_b_headers,
+        )
+        assert foreign_disable.status_code == 404
