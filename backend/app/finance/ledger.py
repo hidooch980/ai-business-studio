@@ -60,6 +60,7 @@ def create_journal_entry(
     lines: list[dict],
     posting_date: date | None = None,
     reversal_of_id: UUID | None = None,
+    commit: bool = True,
 ) -> tuple[JournalEntry, bool]:
     key = idempotency_key.strip()
     if not key or len(key) > 128:
@@ -192,8 +193,11 @@ def create_journal_entry(
             outcome="success",
         )
     )
-    db.commit()
-    db.refresh(entry)
+    if commit:
+        db.commit()
+        db.refresh(entry)
+    else:
+        db.flush()
     return entry, True
 
 
