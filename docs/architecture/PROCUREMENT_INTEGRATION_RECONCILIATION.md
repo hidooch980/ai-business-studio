@@ -1,6 +1,6 @@
 # Procurement Integration Reconciliation
 
-Status: procurement-to-payment implementation is staged on a feature branch; latest Push and Pull Request CI both pass, Ruff passes, and PostgreSQL 16 integration suite reports 54 passed. PR #20 and PR #21 remain drafts; nothing has been merged or deployed.
+Status: procurement foundation PR #20 and purchase-to-payment PR #21 have both been merged into `main`. The integrated main commit is `039d260d7d7714a2d62a219cdf38754d1ca3d94e`. PR #21's rebased candidate passed both Push and Pull Request CI, including Ruff and PostgreSQL 16 tests. A separate CI run on the merged `main` commit is in progress. No production database migration or deployment has occurred.
 
 ## Scope gate
 
@@ -19,7 +19,7 @@ Sales, cash register and POS remain explicitly out of scope until the entire pur
 - Domain events, audit records, payment allocations and financial ledger entries are append-only. Corrections require compensating records.
 - Idempotency keys are bound to canonical request hashes; same-key/same-payload calls replay the original response and same-key/different-payload calls conflict.
 
-## Current staged implementation
+## Integrated implementation
 
 ### Database migrations
 
@@ -31,7 +31,7 @@ Sales, cash register and POS remain explicitly out of scope until the entire pur
 
 ### HTTP endpoints
 
-The router factory is `retail_app.api.procurement.create_procurement_router(database, context_dependency)`. The host application must supply its trusted authenticated-context dependency.
+The router factory is `retail_app.api.procurement.create_procurement_router(database, context_dependency)`. The new host adapter is `retail_app.api.auth_context.mount_procurement_routes(app, database, access_context_resolver=...)`.
 
 - `POST /api/procurement/suppliers`
 - `POST /api/procurement/purchase-orders`
@@ -45,7 +45,9 @@ The router factory is `retail_app.api.procurement.create_procurement_router(data
 - `GET /api/procurement/accounts-payable`
 - `POST /api/procurement/supplier-payments`
 
-All write endpoints require `Idempotency-Key`. The host must mount this router into its FastAPI application and provide authentication; this branch does not claim an already-running production API.
+All write endpoints require `Idempotency-Key`. The host adapter fails closed if no resolver is configured and rejects missing/inactive AccessContext values. The resolver must validate the host's server-side session, active identity and tenant membership, and load branch memberships from trusted persistence. It must never trust tenant, role, subject or branch claims from request JSON, query parameters or client-controlled headers.
+
+**Host integration limitation:** this repository currently has a React frontend and policy primitives, but no completed FastAPI host authentication/session implementation. The adapter is a safe mounting seam; it does not itself authenticate users or issue/validate sessions. Do not mount it with a test lambda or an untrusted resolver. A real persistence-backed resolver and host app wiring are still required before protected API use.
 
 ### Receipt and discrepancy controls
 
@@ -95,5 +97,14 @@ All write endpoints require `Idempotency-Key`. The host must mount this router i
 7. Balanced ledger totals by source and immutable audit/event/payment/ledger checks.
 8. End-to-end lifecycle from supplier creation through fully settled payable.
 9. Re-run the complete suite on the final integrated candidate before merge review.
+10. Verify authenticated host resolver behavior, session revocation/expiry, tenant membership changes, branch membership, and unauthenticated/forged-claim denial.
 
-Latest verified feature head: `c6b5a71735699e16aeeaae13b91900c27bd0b71f`. Push and Pull Request CI both passed; Ruff passed; PostgreSQL 16 integration and full test suite: 54 passed. The router factory still needs to be mounted by the host application with its authenticated AccessContext dependency. No production database migration, bank execution, Moadian submission, deployment or merge to main has occurred.
+Previous feature candidate verified: Ruff passed; PostgreSQL 16 integration and full test suite: 54 passed. The rebased PR #21 head passed both Push and Pull Request CI. Main CI for merge commit `039d260d7d7714a2d62a219cdf38754d1ca3d94e` is being checked separately. No production database migration, bank execution, Moadian submission or deployment has occurred.
+
+## Release blockers and explicit exclusions
+
+- Complete and wire a real persistence-backed session/membership resolver into a FastAPI host; the safe adapter alone is not authentication.
+- Complete final integrated tests on `main` after merge.
+- Inventory catalog/warehouse integration and finance tax/freight/discount allocation remain incomplete.
+- No production migration or deployment.
+- Sales, cash register and POS remain stopped until the purchase-to-payment chain and final integrated tests are accepted.
