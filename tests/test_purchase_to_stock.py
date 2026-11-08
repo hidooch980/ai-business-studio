@@ -1,8 +1,8 @@
 import os
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
 import pytest
