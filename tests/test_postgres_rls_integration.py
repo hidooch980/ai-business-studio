@@ -1012,3 +1012,115 @@ def test_23_session_revocation_between_resolution_and_transaction_is_denied():
     finally:
         with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
             admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
+
+def test_24_session_service_issues_and_rotates_single_use_refresh_tokens():
+    from secrets import token_urlsafe
+
+    from fastapi import HTTPException
+
+    from retail_app.api.session_resolver import PostgresSessionResolver
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionService
+
+    service = SessionService(PostgresDatabase(RUNTIME_URL))
+    issued = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    assert len(issued.refresh_token) >= 64
+    assert _resolve_live(issued.refresh_token).subject_id == str(USER_A)
+    rotated = service.rotate(issued.refresh_token)
+    assert rotated.refresh_token != issued.refresh_token
+    assert _resolve_live(rotated.refresh_token).session_id == rotated.session_id
+    with pytest.raises(HTTPException) as error:
+        _resolve_live(issued.refresh_token)
+    assert error.value.status_code == 401
+    assert service.revoke(rotated.refresh_token) is True
+    with pytest.raises(HTTPException):
+        _resolve_live(rotated.refresh_token)
+
+
+def test_25_refresh_token_replay_revokes_the_entire_session_family():
+    from fastapi import HTTPException
+
+    from retail_app.api.session_resolver import PostgresSessionResolver
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import RefreshTokenReplayError, SessionService
+
+    service = SessionService(PostgresDatabase(RUNTIME_URL))
+    first = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    second = service.rotate(first.refresh_token)
+    with pytest.raises(RefreshTokenReplayError):
+        service.rotate(first.refresh_token)
+    with pytest.raises(HTTPException) as error:
+        _resolve_live(second.refresh_token)
+    assert error.value.status_code == 401
+
+
+def test_26_concurrent_refresh_allows_one_rotation_and_replay_revokes_successor():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from fastapi import HTTPException
+
+    from retail_app.api.session_resolver import PostgresSessionResolver
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import RefreshTokenReplayError, SessionService
+
+    service = SessionService(PostgresDatabase(RUNTIME_URL))
+    first = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    barrier = Barrier(2)
+
+    def attempt():
+        barrier.wait(timeout=10)
+        try:
+            return service.rotate(first.refresh_token)
+        except RefreshTokenReplayError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(lambda _: attempt(), range(2)))
+    successors = [item for item in outcomes if item is not None]
+    assert len(successors) == 1
+    with pytest.raises(HTTPException):
+        _resolve_live(successors[0].refresh_token)
+
+
+def test_27_logout_revokes_only_the_presented_session():
+    from fastapi import HTTPException
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionService
+
+    service = SessionService(PostgresDatabase(RUNTIME_URL))
+    first = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    second = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    assert service.revoke(first.refresh_token) is True
+    with pytest.raises(HTTPException):
+        _resolve_live(first.refresh_token)
+    assert _resolve_live(second.refresh_token).subject_id == str(USER_A)
+
+
+def test_28_refresh_denies_membership_revocation_and_revokes_family():
+    from fastapi import HTTPException
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionAuthenticationError, SessionService
+
+    service = SessionService(PostgresDatabase(RUNTIME_URL))
+    first = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        admin.execute(
+            "UPDATE tenant_memberships SET status = 'revoked' "
+            "WHERE tenant_id = %s AND identity_id = %s",
+            (TENANT_A, USER_A),
+        )
+    try:
+        with pytest.raises(SessionAuthenticationError):
+            service.rotate(first.refresh_token)
+        with pytest.raises(HTTPException):
+            _resolve_live(first.refresh_token)
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE tenant_memberships SET status = 'active' "
+                "WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
