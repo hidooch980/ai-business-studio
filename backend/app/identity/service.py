@@ -22,6 +22,7 @@ from backend.app.identity.models import (
     UserSession,
 )
 from backend.app.identity.permissions import PERMISSION_CATALOG
+from backend.app.modules.service import provision_tenant_modules
 from backend.app.identity.security import (
     hash_password,
     hash_session_token,
@@ -86,6 +87,7 @@ def register_user(
     db.flush()
     db.add_all([RolePermission(role_id=owner_role.id, permission_id=item.id) for item in permissions])
     db.add(MembershipRole(tenant_id=tenant.id, membership_id=membership.id, role_id=owner_role.id))
+    provision_tenant_modules(db, tenant_id=tenant.id, actor_user_id=user.id)
     db.flush()
     return user, tenant, membership
 
