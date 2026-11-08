@@ -629,8 +629,24 @@ def test_14_overdelivery_requires_explicit_flag_and_discrepancy_code(runtime):
     manager = AccessContext(
         str(USER_A), str(TENANT_A), Role.BRANCH_MANAGER, frozenset({str(BRANCH_A)})
     )
-    with pytest.raises(PermissionError, match="owner/admin"):
-        receive_goods(database, manager, order_id, **receipt_input, allow_overdelivery=True)
+    # Keep the database-backed role aligned with the manager context so the
+    # transaction boundary does not reject the call before the business rule.
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        admin.execute(
+            "UPDATE tenant_memberships SET role = 'branch_manager' "
+            "WHERE tenant_id = %s AND identity_id = %s",
+            (TENANT_A, USER_A),
+        )
+    try:
+        with pytest.raises(PermissionError, match="owner/admin"):
+            receive_goods(database, manager, order_id, **receipt_input, allow_overdelivery=True)
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE tenant_memberships SET role = 'owner_admin' "
+                "WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
     with pytest.raises(ValueError, match="explicit approval"):
         receive_goods(database, actor, order_id, **receipt_input)
     receipt = receive_goods(database, actor, order_id, **receipt_input, allow_overdelivery=True)
