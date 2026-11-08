@@ -27,6 +27,10 @@ class Permission(StrEnum):
     PURCHASE_ORDER_CREATE = "purchase_order.create"
     PURCHASE_ORDER_READ = "purchase_order.read"
     PURCHASE_ORDER_APPROVE = "purchase_order.approve"
+    GOODS_RECEIPT_CREATE = "goods_receipt.create"
+    SUPPLIER_INVOICE_WRITE = "supplier_invoice.write"
+    ACCOUNTS_PAYABLE_READ = "accounts_payable.read"
+    SUPPLIER_PAYMENT_WRITE = "supplier_payment.write"
     CASH_SHIFT_OPERATE = "cash_shift.operate"
     CUSTOMER_SUPPORT_READ = "customer.support.read"
     CUSTOMER_SELF_READ = "customer.self.read"
@@ -70,6 +74,7 @@ _ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.SUPPLIER_READ,
             Permission.PURCHASE_ORDER_CREATE,
             Permission.PURCHASE_ORDER_READ,
+            Permission.GOODS_RECEIPT_CREATE,
             Permission.CASH_SHIFT_OPERATE,
             Permission.CUSTOMER_SUPPORT_READ,
         }

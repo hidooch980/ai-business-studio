@@ -15,6 +15,7 @@ MIGRATIONS = [
     ROOT / "migrations" / "0001_identity_security.sql",
     ROOT / "migrations" / "0002_transactional_infrastructure.sql",
     ROOT / "migrations" / "0003_suppliers_purchase_orders.sql",
+    ROOT / "migrations" / "0004_receipts_invoices_payments.sql",
 ]
 RUNTIME_URL = "postgresql://retail_runtime:runtime-test-only@localhost:5432/retail_test"
 
@@ -46,6 +47,7 @@ def postgres_schema():
             "0001_identity_security.sql",
             "0002_transactional_infrastructure.sql",
             "0003_suppliers_purchase_orders.sql",
+            "0004_receipts_invoices_payments.sql",
         ]
         conn.execute("GRANT USAGE ON SCHEMA public TO retail_runtime")
         conn.execute(
@@ -147,11 +149,13 @@ def test_1_migration_applies_and_forces_rls_on_all_scoped_tables():
                 'branch_memberships', 'auth_sessions', 'otp_challenges',
                 'security_audit_events', 'idempotency_records', 'domain_events',
                 'outbox_messages', 'audit_events', 'suppliers', 'purchase_orders',
-                'purchase_order_lines'
+                'purchase_order_lines', 'goods_receipts', 'goods_receipt_lines',
+                'inventory_movements', 'supplier_invoices', 'supplier_invoice_lines', 'accounts_payable',
+                'supplier_payments', 'payment_allocations', 'financial_ledger_entries'
             )
             """
         ).fetchall()
-    assert len(rows) == 15
+    assert len(rows) == 24
     assert all(forced for _, forced in rows)
 
 
@@ -401,3 +405,293 @@ def test_12_concurrent_supplier_create_replays_one_idempotent_result():
         results = list(executor.map(lambda _: create_once(), range(2)))
 
     assert results[0] == results[1]
+
+
+
+def test_13_full_procurement_to_payment_lifecycle(runtime):
+    from datetime import UTC, date, datetime
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.procurement.chain import (
+        approve_purchase_order,
+        get_purchase_order,
+        get_stock_balance,
+        list_accounts_payable,
+        match_supplier_invoice,
+        receive_goods,
+        record_supplier_payment,
+        update_draft_purchase_order,
+    )
+    from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
+    from retail_app.procurement.service import create_purchase_order, create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier_id, order_id, invoice_id = str(uuid4()), str(uuid4()), str(uuid4())
+    item_id = str(uuid4())
+    supplier = Supplier(supplier_id, str(TENANT_A), "Lifecycle Supplier")
+    create_supplier(database, actor, supplier, idempotency_key="lifecycle-supplier-0001")
+
+    order = PurchaseOrder(
+        id=order_id, tenant_id=str(TENANT_A), branch_id=str(BRANCH_A),
+        supplier_id=supplier_id, currency="EUR", order_date=date(2026, 11, 8),
+        lines=(PurchaseOrderLine(1, item_id, "Lifecycle stock", 3000, 1000),),
+        order_number="PO-LIFECYCLE-0001",
+    )
+    create_purchase_order(database, actor, order, idempotency_key="lifecycle-po-create-0001")
+    update_draft_purchase_order(
+        database, actor, order_id, supplier_id=supplier_id, currency="EUR",
+        order_date=date(2026, 11, 8),
+        lines=[{
+            "line_number": 1, "item_id": item_id,
+            "description": "Lifecycle stock edited", "quantity_milli": 3000,
+            "unit_price_minor": 1000,
+        }],
+        idempotency_key="lifecycle-po-update-0001",
+    )
+    assert get_purchase_order(database, actor, order_id)["lines"][0]["description"] == "Lifecycle stock edited"
+    approve_purchase_order(
+        database, actor, order_id, idempotency_key="lifecycle-po-approve-0001"
+    )
+
+    receipt_one = receive_goods(
+        database, actor, order_id, receipt_number="GR-LIFECYCLE-0001",
+        received_at=datetime(2026, 11, 8, tzinfo=UTC),
+        lines=[{
+            "po_line_number": 1, "received_quantity_milli": 1000,
+            "accepted_quantity_milli": 1000, "rejected_quantity_milli": 0,
+        }],
+        idempotency_key="lifecycle-receipt-0001",
+    )
+    assert receipt_one["purchase_order_status"] == "partially_received"
+    receipt_two = receive_goods(
+        database, actor, order_id, receipt_number="GR-LIFECYCLE-0002",
+        received_at=datetime(2026, 11, 9, tzinfo=UTC),
+        lines=[{
+            "po_line_number": 1, "received_quantity_milli": 2000,
+            "accepted_quantity_milli": 2000, "rejected_quantity_milli": 0,
+        }],
+        idempotency_key="lifecycle-receipt-0002",
+    )
+    assert receipt_two["purchase_order_status"] == "received"
+    assert get_stock_balance(database, actor, branch_id=str(BRANCH_A), item_id=item_id)["on_hand_quantity_milli"] == 3000
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        receipt_line_ids = [
+            str(row[0]) for row in runtime.execute(
+                """SELECT grl.id FROM goods_receipt_lines grl
+                   JOIN goods_receipts gr
+                     ON gr.tenant_id = grl.tenant_id AND gr.id = grl.goods_receipt_id
+                   WHERE grl.goods_receipt_id IN (%s, %s) ORDER BY gr.received_at""",
+                (receipt_one["id"], receipt_two["id"]),
+            ).fetchall()
+        ]
+    assert len(receipt_line_ids) == 2
+
+    matched = match_supplier_invoice(
+        database, actor, invoice_id=invoice_id, supplier_id=supplier_id,
+        purchase_order_id=order_id, invoice_number="INV-LIFECYCLE-0001",
+        currency="EUR", invoice_date=date(2026, 11, 8), due_date=date(2026, 11, 20),
+        invoice_total_minor=3000,
+        lines=[
+            {
+                "po_line_number": 1, "goods_receipt_line_id": receipt_line_ids[0],
+                "quantity_milli": 1000, "unit_price_minor": 1000,
+            },
+            {
+                "po_line_number": 1, "goods_receipt_line_id": receipt_line_ids[1],
+                "quantity_milli": 2000, "unit_price_minor": 1000,
+            },
+        ],
+        idempotency_key="lifecycle-invoice-match-0001",
+    )
+    assert matched["status"] == "matched"
+    assert matched["payable_id"]
+
+    disputed = match_supplier_invoice(
+        database, actor, invoice_id=str(uuid4()), supplier_id=supplier_id,
+        purchase_order_id=order_id, invoice_number="INV-LIFECYCLE-DISPUTED",
+        currency="EUR", invoice_date=date(2026, 11, 8), due_date=date(2026, 11, 20),
+        invoice_total_minor=2000,
+        lines=[{
+            "po_line_number": 1, "goods_receipt_line_id": receipt_line_ids[0],
+            "quantity_milli": 1000, "unit_price_minor": 2000,
+        }],
+        idempotency_key="lifecycle-invoice-disputed-0001",
+    )
+    assert disputed["status"] == "disputed"
+    assert disputed["payable_id"] is None
+    assert disputed["mismatches"]
+
+    outstanding = list_accounts_payable(database, actor)
+    assert len(outstanding) == 1
+    assert outstanding[0]["outstanding_amount_minor"] == 3000
+
+    payment_id = str(uuid4())
+    payment_args = {
+        "payment_id": payment_id, "supplier_id": supplier_id,
+        "payment_reference": "PAY-LIFECYCLE-0001", "currency": "EUR",
+        "amount_minor": 1000, "paid_at": datetime(2026, 11, 8, tzinfo=UTC),
+        "method": "bank_transfer",
+        "allocations": [{"payable_id": matched["payable_id"], "amount_minor": 1000}],
+        "idempotency_key": "lifecycle-payment-0001",
+    }
+    payment = record_supplier_payment(database, actor, **payment_args)
+    replayed_payment = record_supplier_payment(database, actor, **payment_args)
+    assert replayed_payment == payment
+    assert payment["status"] == "posted"
+    assert payment["allocated_minor"] == 1000
+    assert list_accounts_payable(database, actor)[0]["status"] == "partially_paid"
+    assert list_accounts_payable(database, actor)[0]["outstanding_amount_minor"] == 2000
+
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        record_supplier_payment(
+            database, actor, payment_id=str(uuid4()), supplier_id=supplier_id,
+            payment_reference="PAY-LIFECYCLE-0001", currency="EUR", amount_minor=1000,
+            paid_at=datetime(2026, 11, 8, tzinfo=UTC), method="bank_transfer",
+            allocations=[{"payable_id": matched["payable_id"], "amount_minor": 1000}],
+            idempotency_key="lifecycle-payment-duplicate-key",
+        )
+
+    final_payment = record_supplier_payment(
+        database, actor, payment_id=str(uuid4()), supplier_id=supplier_id,
+        payment_reference="PAY-LIFECYCLE-0002", currency="EUR", amount_minor=2000,
+        paid_at=datetime(2026, 11, 9, tzinfo=UTC), method="bank_transfer",
+        allocations=[{"payable_id": matched["payable_id"], "amount_minor": 2000}],
+        idempotency_key="lifecycle-payment-0002",
+    )
+    assert final_payment["status"] == "posted"
+    assert final_payment["allocated_minor"] == 2000
+    assert list_accounts_payable(database, actor)[0]["status"] == "paid"
+    assert list_accounts_payable(database, actor)[0]["outstanding_amount_minor"] == 0
+
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        journal_rows = runtime.execute(
+            """SELECT source_type, SUM(debit_minor), SUM(credit_minor)
+               FROM financial_ledger_entries
+               WHERE source_id IN (%s, %s, %s, %s, %s) GROUP BY source_type""",
+            (receipt_one["id"], receipt_two["id"], invoice_id, payment["id"], final_payment["id"]),
+        ).fetchall()
+        assert len(journal_rows) == 3
+        assert all(debit == credit for _, debit, credit in journal_rows)
+        assert runtime.execute(
+            "SELECT count(*) FROM payment_allocations WHERE payable_id = %s",
+            (matched["payable_id"],),
+        ).fetchone()[0] == 2
+
+
+
+def test_14_overdelivery_requires_explicit_flag_and_discrepancy_code(runtime):
+    from datetime import UTC, date, datetime
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.procurement.chain import approve_purchase_order, get_stock_balance, receive_goods
+    from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
+    from retail_app.procurement.service import create_purchase_order, create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier_id, order_id = str(uuid4()), str(uuid4())
+    create_supplier(
+        database, actor, Supplier(supplier_id, str(TENANT_A), "Overdelivery Supplier"),
+        idempotency_key="overdelivery-supplier-0001",
+    )
+    order = PurchaseOrder(
+        id=order_id, tenant_id=str(TENANT_A), branch_id=str(BRANCH_A),
+        supplier_id=supplier_id, currency="EUR", order_date=date(2026, 11, 8),
+        lines=(PurchaseOrderLine(1, str(uuid4()), "Overdelivery test", 1000, 1000),),
+        order_number="PO-OVERDELIVERY-0001",
+    )
+    create_purchase_order(database, actor, order, idempotency_key="overdelivery-po-0001")
+    approve_purchase_order(database, actor, order_id, idempotency_key="overdelivery-approve-0001")
+    receipt_input = {
+        "receipt_number": "GR-OVERDELIVERY-0001",
+        "received_at": datetime(2026, 11, 8, tzinfo=UTC),
+        "lines": [{
+            "po_line_number": 1, "received_quantity_milli": 2000,
+            "accepted_quantity_milli": 1000, "rejected_quantity_milli": 1000,
+            "discrepancy_code": "overdelivery",
+        }],
+        "idempotency_key": "overdelivery-receipt-0001",
+    }
+    manager = AccessContext(
+        str(USER_A), str(TENANT_A), Role.BRANCH_MANAGER, frozenset({str(BRANCH_A)})
+    )
+    with pytest.raises(PermissionError, match="owner/admin"):
+        receive_goods(database, manager, order_id, **receipt_input, allow_overdelivery=True)
+    with pytest.raises(ValueError, match="explicit approval"):
+        receive_goods(database, actor, order_id, **receipt_input)
+    receipt = receive_goods(database, actor, order_id, **receipt_input, allow_overdelivery=True)
+    assert receipt["purchase_order_status"] == "received"
+    assert receipt["discrepancies"][0]["code"] == "overdelivery"
+    assert get_stock_balance(database, actor, branch_id=str(BRANCH_A), item_id=order.lines[0].item_id)["on_hand_quantity_milli"] == 1000
+
+
+
+def test_15_database_rejects_unbalanced_financial_journals(runtime):
+    from uuid import uuid4
+
+    with pytest.raises(psycopg.errors.RaiseException, match="not balanced"), runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        runtime.execute(
+                """INSERT INTO financial_ledger_entries
+                   (tenant_id, id, journal_id, source_type, source_id, account_code,
+                    currency, debit_minor, credit_minor)
+                   VALUES (%s, %s, %s, 'test', %s, 'INVENTORY', 'EUR', 100, 0)""",
+                (TENANT_A, uuid4(), uuid4(), uuid4()),
+            )
+
+
+
+def test_16_short_and_rejected_delivery_only_adds_accepted_quantity_to_stock(runtime):
+    from datetime import UTC, date, datetime
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.procurement.chain import (
+        approve_purchase_order,
+        get_stock_balance,
+        receive_goods,
+    )
+    from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
+    from retail_app.procurement.service import create_purchase_order, create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier_id, order_id, item_id = str(uuid4()), str(uuid4()), str(uuid4())
+    create_supplier(
+        database, actor, Supplier(supplier_id, str(TENANT_A), "Short Delivery Supplier"),
+        idempotency_key="short-supplier-0001",
+    )
+    order = PurchaseOrder(
+        id=order_id, tenant_id=str(TENANT_A), branch_id=str(BRANCH_A),
+        supplier_id=supplier_id, currency="EUR", order_date=date(2026, 11, 8),
+        lines=(PurchaseOrderLine(1, item_id, "Short delivery stock", 1500, 1000),),
+        order_number="PO-SHORT-DELIVERY-0001",
+    )
+    create_purchase_order(database, actor, order, idempotency_key="short-po-0001")
+    approve_purchase_order(database, actor, order_id, idempotency_key="short-approve-0001")
+    receipt = receive_goods(
+        database, actor, order_id, receipt_number="GR-SHORT-DELIVERY-0001",
+        received_at=datetime(2026, 11, 8, tzinfo=UTC),
+        lines=[{
+            "po_line_number": 1, "received_quantity_milli": 1000,
+            "accepted_quantity_milli": 800, "rejected_quantity_milli": 200,
+            "discrepancy_code": "shortage",
+            "discrepancy_note": "500 milli short; 200 milli rejected during quality check",
+        }],
+        idempotency_key="short-receipt-0001",
+    )
+    assert receipt["purchase_order_status"] == "partially_received"
+    assert receipt["discrepancies"]
+    stock = get_stock_balance(database, actor, branch_id=str(BRANCH_A), item_id=item_id)
+    assert stock["on_hand_quantity_milli"] == 800
