@@ -1,7 +1,7 @@
 """Persist tenant subscriptions and module entitlements.
 
 Revision ID: 0015_tenant_module_entitlements
-Revises: 0014_smart_procurement_permissions
+Revises: 0014_procurement_perms
 """
 from uuid import uuid4
 
