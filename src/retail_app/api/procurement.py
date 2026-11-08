@@ -3,8 +3,6 @@
 The host application must inject an AccessContext resolved from its authenticated
 session/membership layer. Tenant and role are never accepted from request bodies.
 """
-from __future__ import annotations
-
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Annotated
