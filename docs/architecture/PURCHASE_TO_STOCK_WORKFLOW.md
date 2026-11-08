@@ -42,3 +42,32 @@ All write endpoints require CSRF protection and tenant-scoped RBAC plus the acti
 ## Verification target
 
 The integration test migrates a fresh SQLite database, registers a tenant, upgrades it to Growth, creates supplier/product/warehouse, creates and approves an order, posts partial receipts, verifies replay protection, and confirms the final on-hand quantity and audit trail. CI also exercises the repository's PostgreSQL test service.
+
+
+## Purchase-to-pay (initial implementation)
+
+The dependent feature branch also introduces supplier invoice and payable settlement primitives:
+
+- Supplier invoice draft creation linked to a tenant-owned supplier and purchase order.
+- Invoice line matching against received purchase-order quantities and the approved unit cost.
+- Cumulative invoiced quantity checks across matched, approved, posted, partially paid, and paid invoices.
+- Explicit invoice approval before posting to the accounts-payable subledger.
+- Partial and full manual payment recording with currency checks, outstanding-balance limits, and idempotency keys.
+- Tenant-scoped composite foreign keys, audit events, and unique invoice/payment identifiers.
+
+### API
+
+- `POST /api/v1/procurement/payables/invoices`
+- `POST /api/v1/procurement/payables/invoices/{invoice_id}/match`
+- `POST /api/v1/procurement/payables/invoices/{invoice_id}/approve`
+- `POST /api/v1/procurement/payables/invoices/{invoice_id}/post`
+- `POST /api/v1/procurement/payables/invoices/{invoice_id}/payments`
+- `GET /api/v1/procurement/payables/invoices`
+
+### Deliberate limitations
+
+This is an initial accounts-payable subledger workflow, not a complete bank/payment integration. Posting currently changes the AP subledger state; automatic general-ledger journal generation, tax calculation, invoice attachments/OCR, payment-provider execution, bank reconciliation, multi-currency FX, credit notes, and configurable price/quantity variance tolerances remain future work. No real money is transferred by the manual payment endpoint.
+
+### Verification targets
+
+The integration suite covers a purchase order through receipt, invoice matching, approval, AP posting, partial payment, idempotent replay, and final settlement. It also verifies cross-tenant supplier list isolation and rejection of tenant switching. Concurrent receipt behavior must be exercised against PostgreSQL with parallel transactions before production approval.
