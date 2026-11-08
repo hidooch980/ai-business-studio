@@ -1146,7 +1146,10 @@ def test_28_refresh_denies_membership_revocation_and_revokes_family():
             )
 
 def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
-    from fastapi.testclient import TestClient
+    import asyncio
+
+    import httpx
+    from fastapi import HTTPException
 
     from retail_app.api.app import create_app
     from retail_app.infrastructure.database import PostgresDatabase
@@ -1156,30 +1159,40 @@ def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
     issued = SessionService(database).issue(
         tenant_id=str(TENANT_A), subject_id=str(USER_A)
     )
-    client = TestClient(create_app(database), base_url="https://testserver")
+    app = create_app(database)
     headers = {"Origin": "https://testserver", "Sec-Fetch-Site": "same-origin"}
-    refreshed = client.post(
-        "/api/v1/auth/refresh",
-        headers=headers,
-        cookies={"__Host-retail_session": issued.refresh_token},
-    )
-    assert refreshed.status_code == 204, refreshed.text
-    set_cookie = refreshed.headers.get("set-cookie", "").lower()
-    assert "secure" in set_cookie and "httponly" in set_cookie and "samesite=strict" in set_cookie
-    rotated_token = client.cookies.get("__Host-retail_session")
-    assert rotated_token and rotated_token != issued.refresh_token
-    assert _resolve_live(rotated_token).subject_id == str(USER_A)
-    logged_out = client.post("/api/v1/auth/logout", headers=headers)
-    assert logged_out.status_code == 204
-    assert "max-age=0" in logged_out.headers.get("set-cookie", "").lower()
-    from fastapi import HTTPException
 
+    async def exercise_endpoints():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="https://testserver",
+        ) as client:
+            refreshed = await client.post(
+                "/api/v1/auth/refresh",
+                headers={**headers, "Cookie": f"__Host-retail_session={issued.refresh_token}"},
+            )
+            assert refreshed.status_code == 204, refreshed.text
+            set_cookie = refreshed.headers.get("set-cookie", "").lower()
+            assert "secure" in set_cookie and "httponly" in set_cookie and "samesite=strict" in set_cookie
+            rotated_token = refreshed.headers["set-cookie"].split(";", 1)[0].split("=", 1)[1]
+            assert rotated_token and rotated_token != issued.refresh_token
+            assert _resolve_live(rotated_token).subject_id == str(USER_A)
+            logged_out = await client.post(
+                "/api/v1/auth/logout",
+                headers={**headers, "Cookie": f"__Host-retail_session={rotated_token}"},
+            )
+            assert logged_out.status_code == 204
+            assert "max-age=0" in logged_out.headers.get("set-cookie", "").lower()
+
+    asyncio.run(exercise_endpoints())
     with pytest.raises(HTTPException) as error:
         _resolve_live(rotated_token)
     assert error.value.status_code == 401
 
 def test_30_refresh_and_logout_reject_cross_site_requests():
-    from fastapi.testclient import TestClient
+    import asyncio
+
+    import httpx
 
     from retail_app.api.app import create_app
     from retail_app.infrastructure.database import PostgresDatabase
@@ -1189,12 +1202,23 @@ def test_30_refresh_and_logout_reject_cross_site_requests():
     issued = SessionService(database).issue(
         tenant_id=str(TENANT_A), subject_id=str(USER_A)
     )
-    client = TestClient(create_app(database), base_url="https://testserver")
-    client.cookies.set("__Host-retail_session", issued.refresh_token, domain="testserver", path="/")
-    response = client.post(
-        "/api/v1/auth/refresh",
-        headers={"Origin": "https://attacker.example", "Sec-Fetch-Site": "cross-site"},
-    )
+    app = create_app(database)
+
+    async def send_cross_site_request():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="https://testserver",
+        ) as client:
+            return await client.post(
+                "/api/v1/auth/refresh",
+                headers={
+                    "Origin": "https://attacker.example",
+                    "Sec-Fetch-Site": "cross-site",
+                    "Cookie": f"__Host-retail_session={issued.refresh_token}",
+                },
+            )
+
+    response = asyncio.run(send_cross_site_request())
     assert response.status_code == 403
     assert _resolve_live(issued.refresh_token).subject_id == str(USER_A)
 
