@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import get_settings
 from backend.app.db.session import build_engine, get_db_session
 from backend.app.identity.models import AuditEvent
-from backend.app.inventory.models import InventoryBalance, InventoryMovement
+from backend.app.inventory.models import InventoryMovement
 from backend.app.main import create_app
 from backend.app.procurement.models import ProcurementReceipt, PurchaseOrder
 
