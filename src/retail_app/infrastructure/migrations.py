@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+import re
 
 MIGRATION_LOCK_ID = 7_341_102_026
 
@@ -45,11 +45,17 @@ def apply_migrations(database_url: str, migrations_dir: str | Path) -> list[str]
                 if exists:
                     continue
                 sql = script.read_text(encoding="utf-8")
-                connection.execute(sql, prepare=False)
-                connection.execute(
-                    "INSERT INTO schema_migrations(version) VALUES (%s)",
-                    (version,),
-                )
+                # SQL files are also directly executable and therefore carry
+                # BEGIN/COMMIT. Strip those wrappers so the migration and its
+                # ledger entry commit atomically in this runner.
+                sql = re.sub(r"^\\s*BEGIN\\s*;", "", sql, count=1, flags=re.IGNORECASE)
+                sql = re.sub(r"\\s*COMMIT\\s*;\\s*$", "", sql, count=1, flags=re.IGNORECASE)
+                with connection.transaction():
+                    connection.execute(sql, prepare=False)
+                    connection.execute(
+                        "INSERT INTO schema_migrations(version) VALUES (%s)",
+                        (version,),
+                    )
                 applied.append(version)
         finally:
             connection.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_LOCK_ID,))
