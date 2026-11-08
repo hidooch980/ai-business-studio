@@ -221,7 +221,7 @@ def test_lookup_owner_has_only_session_table_read_scope():
         privileges = conn.execute(
             """
             SELECT
-                has_table_privilege('auth_session_lookup_owner', 'public.auth_sessions', 'SELECT'),
+                has_column_privilege('auth_session_lookup_owner', 'public.auth_sessions', 'refresh_token_hash', 'SELECT'),
                 has_table_privilege('auth_session_lookup_owner', 'public.identities', 'SELECT'),
                 has_table_privilege('auth_session_lookup_owner', 'public.tenants', 'SELECT'),
                 pg_has_role('retail_session_runtime', 'auth_session_lookup_owner', 'MEMBER')
