@@ -17,6 +17,19 @@ GRANT CREATE ON SCHEMA public TO auth_session_lookup_owner;
 GRANT SELECT (id, tenant_id, identity_id, refresh_token_hash, expires_at, revoked_at)
     ON TABLE public.auth_sessions TO auth_session_lookup_owner;
 
+CREATE TABLE public.auth_session_lookup_audit (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    session_id uuid,
+    outcome text NOT NULL CHECK (outcome IN ('matched', 'unknown'))
+);
+ALTER TABLE public.auth_session_lookup_audit ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.auth_session_lookup_audit FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.auth_session_lookup_audit FROM PUBLIC;
+
+GRANT INSERT ON TABLE public.auth_session_lookup_audit TO auth_session_lookup_owner;
+GRANT USAGE ON SEQUENCE public.auth_session_lookup_audit_id_seq TO auth_session_lookup_owner;
+
 CREATE OR REPLACE FUNCTION public.resolve_auth_session(p_token_sha256 bytea)
 RETURNS TABLE (
     session_id uuid,
@@ -25,16 +38,40 @@ RETURNS TABLE (
     expires_at timestamptz,
     revoked_at timestamptz
 )
-LANGUAGE sql
-STABLE
+LANGUAGE plpgsql
+VOLATILE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $function$
+DECLARE
+    matched_session record;
+BEGIN
+    IF p_token_sha256 IS NULL OR octet_length(p_token_sha256) <> 32 THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (NULL, 'unknown');
+        RETURN;
+    END IF;
+
     SELECT s.id, s.tenant_id, s.identity_id, s.expires_at, s.revoked_at
+      INTO matched_session
     FROM public.auth_sessions AS s
-    WHERE octet_length(p_token_sha256) = 32
-      AND s.refresh_token_hash = p_token_sha256
-    LIMIT 1
+    WHERE s.refresh_token_hash = p_token_sha256
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (NULL, 'unknown');
+        RETURN;
+    END IF;
+
+    INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+    VALUES (matched_session.id, 'matched');
+
+    RETURN QUERY
+    SELECT matched_session.id, matched_session.tenant_id,
+           matched_session.identity_id, matched_session.expires_at,
+           matched_session.revoked_at;
+END
 $function$;
 
 ALTER FUNCTION public.resolve_auth_session(bytea) OWNER TO auth_session_lookup_owner;
