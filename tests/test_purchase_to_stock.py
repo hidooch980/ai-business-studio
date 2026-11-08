@@ -479,6 +479,24 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         )).all()
         assert sum(line.debit_minor for line in payable_debits) == 3_750
         assert sum(line.credit_minor for line in payable_credits) == 3_750
+        new_cash_account = purchasing_client.post(
+            "/api/v1/finance/accounts",
+            json={"code": "1010", "name": "Replacement Bank", "account_type": "asset"},
+            headers=headers,
+        )
+        assert new_cash_account.status_code == 201, new_cash_account.text
+        locked_settings = purchasing_client.put(
+            "/api/v1/procurement/accounting-settings",
+            json={
+                "inventory_account_code": "1400",
+                "grni_account_code": "1490",
+                "ap_account_code": "2100",
+                "cash_account_code": "1010",
+                "base_currency": "USD",
+            },
+            headers=headers,
+        )
+        assert locked_settings.status_code == 409, locked_settings.text
 
 
 
