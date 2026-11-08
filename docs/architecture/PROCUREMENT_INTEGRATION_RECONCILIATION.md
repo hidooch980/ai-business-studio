@@ -1,61 +1,99 @@
 # Procurement Integration Reconciliation
 
-Status: foundation implementation staged; integration and PostgreSQL CI verification pending.
-
-## Decision
-
-The purchase-to-pay feature pull requests must not be merged directly into the current `main` lineage. The current `main` tree is a newer/different application foundation:
-
-- Python package discovery is rooted at `src/` and the runtime package is `retail_app`.
-- The current package contains security authorization and reporting primitives, but no procurement, inventory, finance-ledger, FastAPI application, or SQLAlchemy model layer.
-- The current identity schema is authored as raw PostgreSQL SQL in `migrations/0001_identity_security.sql`.
-- The dependent procurement pull requests use a separate `backend.app.*` package, FastAPI + SQLAlchemy + Alembic, and Alembic revisions `0014` through `0019`.
-
-These are architectural differences, not a simple path rename. Copying the feature branch's `backend/` tree and Alembic migrations into `main` would create a second application runtime and a second migration system without proving that either is wired to the current tenant/security foundation.
-
-## Integration target
-
-All new work is staged on `integration/procurement-foundation-2026-11`, created from the current `main` commit. The target remains the current `src/retail_app` package and the existing SQL migration convention unless a reviewed architecture decision explicitly replaces them.
-
-## Dependency order
-
-1. Stabilize the current identity/tenant/branch authorization contract and database migration runner.
-2. Establish shared persistence, transaction, audit, idempotency, and outbox primitives that match the current package.
-3. Add supplier and purchase-order domain models and APIs.
-4. Add goods receipt with append-only inventory movements, stock balance invariants, and concurrent over-receipt protection.
-5. Add supplier invoice matching against approved purchase orders and actually received quantities.
-6. Add payable ledger posting and manual supplier payment recording with idempotency.
-7. Add accounting settings and journal integration only after the existing finance ledger contract is available.
-8. Add Moadian connection profiles as configuration-only, with opaque secret references; no live submission.
-9. Run the complete integrated migration, tenant-isolation, authorization, rollback, idempotency, concurrency, and end-to-end test suite.
-
-## Porting rules
-
-- Port domain behavior and tests selectively; do not copy the legacy `backend/app` package wholesale.
-- Reuse the current tenant and branch authorization boundary; every query and mutation must be tenant-scoped.
-- Keep money in integer minor units with explicit currency codes.
-- Keep inventory movements and posted journals append-only; corrections use compensating entries.
-- Bind idempotency keys to canonical request hashes and test concurrent replay.
-- Use atomic transactions for domain state, ledger entries, audit records, and outbox events.
-- Do not merge both competing `0017` migrations from the old branch chain. The existing purchase-to-pay branch already has an invoice/payment migration at that revision.
-- Do not post tax, freight, or discounts into inventory/GRNI until explicit allocation and accounting rules exist.
-- Do not execute real bank transfers or enable live Moadian submissions in this phase.
+Status: procurement-to-payment implementation is staged on a feature branch; latest Push and Pull Request CI both pass, Ruff passes, and PostgreSQL 16 integration suite reports 54 passed. PR #20 and PR #21 remain drafts; nothing has been merged or deployed.
 
 ## Scope gate
 
-Sales, cash register, and POS remain out of scope. They may begin only after the complete purchase and payment dependency chain is integrated and all final tests pass on the integrated candidate.
+The authorized sequence is supplier -> purchase order -> approval -> goods receipt -> three-way invoice match -> accounts payable -> supplier payment -> final integrated verification.
 
-## Current implementation on the integration branch
+Sales, cash register and POS remain explicitly out of scope until the entire purchase-to-payment chain passes the final integrated test suite. Do not start those modules early.
 
-- Migration `0002_transactional_infrastructure.sql`: tenant-scoped idempotency records, immutable domain events, transactional outbox, and append-only business audit events.
-- Migration `0003_suppliers_purchase_orders.sql`: tenant-scoped suppliers, branch-scoped purchase orders, and purchase-order lines.
-- Python infrastructure: PostgreSQL transaction boundary with transaction-local RLS context, ordered SQL migration runner with advisory locking, audit writer, domain-event/outbox writer, and canonical request hashing/idempotency reservation helpers.
-- Procurement domain: supplier and purchase-order value objects plus transactional application services for creating suppliers and draft purchase orders.
-- Purchase-order creation validates the supplier is active and checks the actor's assigned branch; supplier-directory writes are tenant-admin-only.
-- Both create flows persist the business record, audit entry, domain event, outbox message, and idempotency response in one database transaction.
-- Authorization: supplier and purchase-order permissions added to the existing deny-by-default role model. Branch managers may create/read orders; approval remains owner-admin only.
-- CI now includes pushes to `integration/**` so this work can be verified before a pull request is opened.
+## Architecture decisions
 
-## Verification status
+- Continue in the existing `src/retail_app` package and ordered PostgreSQL SQL migration system.
+- Do not copy the legacy `backend.app`/Alembic tree wholesale; it is a different runtime and migration lineage.
+- Every business query and write is tenant-scoped; branch operations are checked against trusted AccessContext memberships.
+- The HTTP router receives AccessContext from a host-provided authenticated dependency. Tenant, role and branch claims are never accepted from request bodies.
+- Financial amounts use integer minor currency units and explicit ISO currency codes.
+- State changes, audit records, domain events, outbox records and idempotency completion share one transaction.
+- Domain events, audit records, payment allocations and financial ledger entries are append-only. Corrections require compensating records.
+- Idempotency keys are bound to canonical request hashes; same-key/same-payload calls replay the original response and same-key/different-payload calls conflict.
 
-The code and migrations have been committed to the integration branch, but PostgreSQL migrations and the complete test suite have not yet been observed running on this branch. No deployment or merge to `main` has occurred. The migration runner expects a fresh database or an explicitly baselined migration ledger; a database where `0001` was manually applied must be baselined before running it.
+## Current staged implementation
+
+### Database migrations
+
+- `0002_transactional_infrastructure.sql`: tenant-scoped idempotency, domain events, outbox and audit.
+- `0003_suppliers_purchase_orders.sql`: suppliers, purchase orders and lines.
+- `0004_receipts_invoices_payments.sql`: goods receipts and discrepancy lines, supplier invoices and invoice lines, accounts payable, supplier payments, payment allocations and double-entry ledger lines.
+- All new tenant tables enable and force RLS with transaction-local tenant context.
+- Invoice lines have a composite foreign key to the exact PO line and receipt line to prevent cross-order/line matching.
+
+### HTTP endpoints
+
+The router factory is `retail_app.api.procurement.create_procurement_router(database, context_dependency)`. The host application must supply its trusted authenticated-context dependency.
+
+- `POST /api/procurement/suppliers`
+- `POST /api/procurement/purchase-orders`
+- `GET /api/procurement/purchase-orders`
+- `GET /api/procurement/purchase-orders/{order_id}`
+- `PATCH /api/procurement/purchase-orders/{order_id}` (draft only)
+- `POST /api/procurement/purchase-orders/{order_id}/approve` (owner/admin only)
+- `POST /api/procurement/purchase-orders/{order_id}/receipts`
+- `POST /api/procurement/supplier-invoices/match`
+- `GET /api/procurement/inventory/stock?branch_id=...&item_id=...` (derived from immutable movements)
+- `GET /api/procurement/accounts-payable`
+- `POST /api/procurement/supplier-payments`
+
+All write endpoints require `Idempotency-Key`. The host must mount this router into its FastAPI application and provide authentication; this branch does not claim an already-running production API.
+
+### Receipt and discrepancy controls
+
+- Only approved or partially received orders can receive goods.
+- Received quantity must equal accepted plus rejected quantity.
+- Rejections and overdelivery require a discrepancy code.
+- Cumulative delivered quantity above ordered quantity is rejected unless an explicit overdelivery flag is set by a tenant owner/admin; branch managers cannot authorize overdelivery.
+- Accepted quantities create immutable, tenant/branch-scoped inventory movements in the same transaction as the receipt; rejected quantities never enter stock.
+- On-hand quantity is derived by summing the movement ledger and is exposed through the branch-scoped stock API.
+- Receipt value posts Inventory debit / GRNI credit based on accepted quantities and PO unit prices.
+- The movement ledger is not yet linked to a catalog/item-master FK, warehouse/bin locations, stock reservations, costing layers or downstream issue/adjustment workflows. Do not treat those broader warehouse functions as complete.
+
+### Three-way invoice match
+
+- Invoice supplier and currency must match the PO.
+- Each invoice line must point to a receipt line belonging to the same PO and PO line.
+- Invoice quantity is checked against accepted received quantity; invoice unit price is checked against PO price.
+- Header total must equal the exact sum of invoice line totals.
+- Any mismatch leaves the invoice in `disputed` status and does not create an AP balance.
+- Only a matched invoice creates one AP item and posts GRNI debit / Accounts Payable credit.
+- Tax, freight, discounts, exchange differences and rounding allocation are not yet supported; they must be explicitly designed before production use.
+
+### Accounts payable and payment
+
+- AP records retain original amount, outstanding amount, currency, due date and open/partial/paid status.
+- Supplier payments are recorded with a unique tenant-scoped reference and explicit allocation to one or more AP items.
+- Allocation total must equal payment amount and cannot exceed any AP outstanding balance.
+- Payment posts Accounts Payable debit / Bank, Cash or clearing credit; ledger entries are immutable.
+- Payment is a manual accounting record only. No bank transfer, payment gateway or external financial execution is performed.
+- The ledger writer emits balanced debit/credit pairs, and a deferred PostgreSQL constraint trigger rejects an unbalanced journal at commit. A full chart-of-accounts, period close and reversal workflow remain future finance work.
+
+## Authorization
+
+- Tenant owner/admin: supplier directory writes, PO approval, invoice matching, AP visibility and supplier payment recording.
+- Branch manager: read/create/edit draft purchase orders and post goods receipts only inside assigned branches.
+- Employee/customer roles do not gain procurement write privileges.
+- Every API context must originate from trusted authentication and membership resolution, never request data.
+
+## Verification plan
+
+1. Ruff and unit tests.
+2. Fresh PostgreSQL migration application and RLS checks.
+3. Supplier and PO create/read/edit/approve with audit/event/idempotency.
+4. Receipt accepted/rejected/short/overdelivery and concurrent receipt checks.
+5. Three-way invoice exact match, price/quantity/total mismatch and disputed/no-AP behavior.
+6. AP due date, partial/full payment, allocation bounds and duplicate payment replay.
+7. Balanced ledger totals by source and immutable audit/event/payment/ledger checks.
+8. End-to-end lifecycle from supplier creation through fully settled payable.
+9. Re-run the complete suite on the final integrated candidate before merge review.
+
+Latest verified feature head: `c6b5a71735699e16aeeaae13b91900c27bd0b71f`. Push and Pull Request CI both passed; Ruff passed; PostgreSQL 16 integration and full test suite: 54 passed. The router factory still needs to be mounted by the host application with its authenticated AccessContext dependency. No production database migration, bank execution, Moadian submission, deployment or merge to main has occurred.
