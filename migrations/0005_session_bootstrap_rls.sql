@@ -65,6 +65,6 @@ AS $fn$
 $fn$;
 ALTER FUNCTION resolve_auth_session_bootstrap(bytea) OWNER TO auth_bootstrap_owner;
 REVOKE ALL ON FUNCTION resolve_auth_session_bootstrap(bytea) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION resolve_auth_session_bootstrap(bytea) TO app_runtime;
+GRANT EXECUTE ON FUNCTION resolve_auth_session_bootstrap(bytea) TO retail_runtime;
 
 COMMIT;
