@@ -9,6 +9,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.identity import models as identity_models  # noqa: F401
 from backend.app.inventory import models as inventory_models  # noqa: F401
+from backend.app.moadian import models as moadian_models  # noqa: F401
 from backend.app.outbox import models as outbox_models  # noqa: F401
 from backend.app.procurement import models as procurement_models  # noqa: F401
 
