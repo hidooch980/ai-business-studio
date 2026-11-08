@@ -38,7 +38,7 @@ def create_session_router(
 
     @router.get("/sessions")
     def list_sessions(
-        context: AccessContext = Depends(context_dependency),
+        context: AccessContext = Depends(context_dependency),  # noqa: B008
     ) -> list[dict[str, object]]:
         if context.session_id is None or context.session_token_hash is None:
             raise HTTPException(status_code=401, detail="authentication required")
@@ -56,7 +56,7 @@ def create_session_router(
         session_id: UUID,
         request: Request,
         response: Response,
-        context: Annotated[AccessContext, Depends(context_dependency)],
+        context: AccessContext = Depends(context_dependency),  # noqa: B008
     ) -> Response:
         _require_same_origin(request)
         if context.session_id is None or context.session_token_hash is None:
