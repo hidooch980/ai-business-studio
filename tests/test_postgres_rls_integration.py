@@ -1280,3 +1280,57 @@ def test_33_expired_refresh_token_is_denied_and_audited_using_database_time():
                  AND metadata->>'session_id' = %s""",
             (issued.session_id,),
         ).fetchone()[0] == 1
+
+def test_34_rejected_receipt_quantity_can_be_replaced_without_false_overdelivery():
+    from datetime import UTC, date, datetime
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.procurement.chain import get_stock_balance, receive_goods
+    from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
+    from retail_app.procurement.service import create_purchase_order, create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier_id, order_id, item_id = str(uuid4()), str(uuid4()), str(uuid4())
+    create_supplier(
+        database, actor, Supplier(supplier_id, str(TENANT_A), "Replacement Supplier"),
+        idempotency_key="replacement-supplier-0001",
+    )
+    create_purchase_order(
+        database,
+        actor,
+        PurchaseOrder(
+            id=order_id, tenant_id=str(TENANT_A), branch_id=str(BRANCH_A),
+            supplier_id=supplier_id, currency="EUR", order_date=date(2026, 11, 8),
+            lines=(PurchaseOrderLine(1, item_id, "Replacement item", 10000, 1000),),
+            order_number="PO-REPLACEMENT-0001",
+        ),
+        idempotency_key="replacement-po-create-0001",
+    )
+    first = receive_goods(
+        database, actor, order_id, receipt_number="GR-REPLACEMENT-0001",
+        received_at=datetime(2026, 11, 8, tzinfo=UTC),
+        lines=[{
+            "po_line_number": 1, "received_quantity_milli": 10000,
+            "accepted_quantity_milli": 5000, "rejected_quantity_milli": 5000,
+            "discrepancy_code": "damaged",
+        }],
+        idempotency_key="replacement-receipt-0001",
+    )
+    assert first["purchase_order_status"] == "partially_received"
+    second = receive_goods(
+        database, actor, order_id, receipt_number="GR-REPLACEMENT-0002",
+        received_at=datetime(2026, 11, 9, tzinfo=UTC),
+        lines=[{
+            "po_line_number": 1, "received_quantity_milli": 5000,
+            "accepted_quantity_milli": 5000, "rejected_quantity_milli": 0,
+        }],
+        idempotency_key="replacement-receipt-0002",
+    )
+    assert second["purchase_order_status"] == "received"
+    assert get_stock_balance(
+        database, actor, branch_id=str(BRANCH_A), item_id=item_id
+    )["on_hand_quantity_milli"] == 10000
