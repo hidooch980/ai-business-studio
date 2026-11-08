@@ -38,6 +38,9 @@ def postgres_schema():
         pytest.skip("TEST_DATABASE_URL is not configured")
     with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
         conn.execute(
+            "CREATE ROLE auth_bootstrap_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS"
+        )
+        conn.execute(
             "CREATE ROLE retail_runtime LOGIN PASSWORD 'runtime-test-only' "
             "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS"
         )
@@ -48,11 +51,13 @@ def postgres_schema():
             "0002_transactional_infrastructure.sql",
             "0003_suppliers_purchase_orders.sql",
             "0004_receipts_invoices_payments.sql",
+            "0005_session_bootstrap_rls.sql",
         ]
         conn.execute("GRANT USAGE ON SCHEMA public TO retail_runtime")
         conn.execute(
             "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO retail_runtime"
         )
+        conn.execute("REVOKE ALL ON auth_session_bootstrap FROM retail_runtime")
         conn.execute(
             """
             INSERT INTO tenants (id, name) VALUES (%s, 'Tenant A'), (%s, 'Tenant B');
@@ -695,3 +700,50 @@ def test_16_short_and_rejected_delivery_only_adds_accepted_quantity_to_stock(run
     assert receipt["discrepancies"]
     stock = get_stock_balance(database, actor, branch_id=str(BRANCH_A), item_id=item_id)
     assert stock["on_hand_quantity_milli"] == 800
+
+
+
+def test_14_session_bootstrap_lookup_is_narrow_and_runtime_cannot_read_table(runtime):
+    with runtime.transaction():
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            runtime.execute("SELECT count(*) FROM auth_session_bootstrap")
+        row = runtime.execute(
+            """
+            SELECT tenant_id, identity_id, session_id
+            FROM resolve_auth_session_bootstrap(decode(repeat('01', 32), 'hex'))
+            """
+        ).fetchone()
+        assert row == (TENANT_A, USER_A, SESSION_A)
+
+
+def test_15_session_bootstrap_rejects_expired_and_revoked_sessions(runtime):
+    with runtime.transaction():
+        runtime.execute(
+            "UPDATE auth_sessions SET expires_at = now() - interval '1 second' WHERE id = %s",
+            (SESSION_A,),
+        )
+        assert runtime.execute(
+            "SELECT count(*) FROM resolve_auth_session_bootstrap(decode(repeat('01', 32), 'hex'))"
+        ).fetchone()[0] == 0
+        runtime.execute(
+            "UPDATE auth_sessions SET expires_at = now() + interval '1 day', revoked_at = now() WHERE id = %s",
+            (SESSION_A,),
+        )
+        assert runtime.execute(
+            "SELECT count(*) FROM resolve_auth_session_bootstrap(decode(repeat('01', 32), 'hex'))"
+        ).fetchone()[0] == 0
+
+
+def test_16_bootstrap_owner_and_runtime_have_no_bypassrls(runtime):
+    with runtime.transaction():
+        rows = runtime.execute(
+            """
+            SELECT rolname, rolsuper, rolbypassrls
+            FROM pg_roles WHERE rolname IN ('auth_bootstrap_owner', 'retail_runtime')
+            ORDER BY rolname
+            """
+        ).fetchall()
+        assert rows == [
+            ("auth_bootstrap_owner", False, False),
+            ("retail_runtime", False, False),
+        ]
