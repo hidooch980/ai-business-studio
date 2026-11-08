@@ -9,10 +9,17 @@ role direct access to the bootstrap table.
 
 ## Narrow bootstrap design (migration 0005)
 
-Before applying migration 0005, provision a dedicated role:
+Before applying migration 0005, provision a dedicated role and temporarily grant membership to the migration principal so PostgreSQL permits the ownership transfers. Do not grant this role to the runtime account:
 
 ```sql
 CREATE ROLE auth_bootstrap_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+GRANT auth_bootstrap_owner TO db_migrator;
+```
+
+After the migration succeeds, revoke the temporary membership:
+
+```sql
+REVOKE auth_bootstrap_owner FROM db_migrator;
 ```
 
 The migration creates `auth_session_bootstrap`, a minimal lookup table containing
