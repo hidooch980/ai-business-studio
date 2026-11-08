@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from retail_app.api.auth_context import require_authenticated_access_context
-from retail_app.security.authorization import AccessContext
 from retail_app.security.auth_service import AuthService
+from retail_app.security.authorization import AccessContext
 
 SESSION_COOKIE = "__Host-retail_session"
 CSRF_COOKIE = "__Host-retail_csrf"
@@ -70,7 +70,7 @@ def create_auth_router(service: AuthService, *, session_ttl_seconds: int = 25920
     def rotate_session(
         request: Request,
         response: Response,
-        context: AccessContext = Depends(require_authenticated_access_context),
+        context: AccessContext = Depends(require_authenticated_access_context),  # noqa: B008
     ) -> dict[str, str]:
         session_id = getattr(request.state, "session_id", None)
         if not session_id:
