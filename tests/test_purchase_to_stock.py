@@ -532,6 +532,19 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         )).all()
         assert sum(line.debit_minor for line in payable_debits) == 3_750
         assert sum(line.credit_minor for line in payable_credits) == 3_750
+        account_totals: dict[str, tuple[int, int]] = {}
+        for line in db.scalars(
+            select(JournalLine).where(JournalLine.tenant_id == UUID(tenant_id))
+        ).all():
+            debit, credit = account_totals.get(line.account_code, (0, 0))
+            account_totals[line.account_code] = (
+                debit + line.debit_minor,
+                credit + line.credit_minor,
+            )
+        assert account_totals["1400"] == (3_750, 0)  # Inventory asset
+        assert account_totals["1490"] == (3_750, 3_750)  # GRNI cleared by invoice
+        assert account_totals["2100"] == (3_750, 3_750)  # AP fully settled
+        assert account_totals["1000"] == (0, 3_750)  # Cash/bank credit
     # A closed financial period must reject a supplier payment atomically.
     with Session(purchasing_client.app.state.test_engine) as db:
         original_invoice = db.scalar(
