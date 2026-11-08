@@ -697,3 +697,31 @@ def test_16_short_and_rejected_delivery_only_adds_accepted_quantity_to_stock(run
     assert receipt["discrepancies"]
     stock = get_stock_balance(database, actor, branch_id=str(BRANCH_A), item_id=item_id)
     assert stock["on_hand_quantity_milli"] == 800
+
+
+def test_17_otp_challenge_is_rate_limited_and_consumed_atomically(runtime):
+    import hashlib
+    from uuid import uuid4
+
+    challenge_id = uuid4()
+    fingerprint = hashlib.sha256(b"otp-test-identifier").digest()
+    valid_code_hmac = hashlib.sha256(b"valid-code-hmac").digest()
+    invalid_code_hmac = hashlib.sha256(b"invalid-code-hmac").digest()
+    with runtime.transaction():
+        destination = runtime.execute(
+            "SELECT public.issue_auth_otp(%s, %s, %s, %s, %s)",
+            (challenge_id, "+12025550101", fingerprint, valid_code_hmac, "sms"),
+        ).fetchone()[0]
+        assert destination == "+12025550101"
+        assert runtime.execute(
+            "SELECT public.consume_auth_otp(%s, %s, %s)",
+            (challenge_id, fingerprint, invalid_code_hmac),
+        ).fetchone()[0] is None
+        assert runtime.execute(
+            "SELECT public.consume_auth_otp(%s, %s, %s)",
+            (challenge_id, fingerprint, valid_code_hmac),
+        ).fetchone()[0] == USER_A
+        assert runtime.execute(
+            "SELECT public.consume_auth_otp(%s, %s, %s)",
+            (challenge_id, fingerprint, valid_code_hmac),
+        ).fetchone()[0] is None
