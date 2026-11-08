@@ -823,6 +823,7 @@ def test_18_real_postgres_resolver_denies_expired_or_revoked_sessions(expired, r
 
 def test_19_real_postgres_resolver_denies_revoked_membership():
     from secrets import token_urlsafe
+
     from fastapi import HTTPException
 
     token = token_urlsafe(48)
@@ -847,6 +848,7 @@ def test_19_real_postgres_resolver_denies_revoked_membership():
 
 def test_20_role_change_between_resolution_and_business_transaction_is_denied():
     from secrets import token_urlsafe
+
     from retail_app.infrastructure.database import PostgresDatabase
 
     token = token_urlsafe(48)
@@ -859,14 +861,13 @@ def test_20_role_change_between_resolution_and_business_transaction_is_denied():
                 "UPDATE tenant_memberships SET role = 'employee' WHERE tenant_id = %s AND identity_id = %s",
                 (TENANT_A, USER_A),
             )
-        with pytest.raises(PermissionError, match="role changed"):
-            with database.tenant_transaction(
-                tenant_id=context.tenant_id,
-                subject_id=context.subject_id,
-                expected_role=context.role.value,
-                expected_branch_ids=context.branch_ids,
-            ):
-                pass
+        with pytest.raises(PermissionError, match="role changed"), database.tenant_transaction(
+            tenant_id=context.tenant_id,
+            subject_id=context.subject_id,
+            expected_role=context.role.value,
+            expected_branch_ids=context.branch_ids,
+        ):
+            pass
     finally:
         with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
             admin.execute(
@@ -878,6 +879,7 @@ def test_20_role_change_between_resolution_and_business_transaction_is_denied():
 
 def test_21_real_postgres_cross_tenant_and_branch_revocation_are_denied():
     from secrets import token_urlsafe
+
     from retail_app.infrastructure.database import PostgresDatabase
 
     token = token_urlsafe(48)
@@ -906,14 +908,13 @@ def test_21_real_postgres_cross_tenant_and_branch_revocation_are_denied():
                    WHERE tenant_id = %s AND branch_id = %s AND identity_id = %s""",
                 (TENANT_A, BRANCH_A, USER_A),
             )
-        with pytest.raises(PermissionError, match="branch membership changed"):
-            with database.tenant_transaction(
-                tenant_id=branch_context.tenant_id,
-                subject_id=branch_context.subject_id,
-                expected_role=branch_context.role.value,
-                expected_branch_ids=branch_context.branch_ids,
-            ):
-                pass
+        with pytest.raises(PermissionError, match="branch membership changed"), database.tenant_transaction(
+            tenant_id=branch_context.tenant_id,
+            subject_id=branch_context.subject_id,
+            expected_role=branch_context.role.value,
+            expected_branch_ids=branch_context.branch_ids,
+        ):
+            pass
     finally:
         with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
             admin.execute(
