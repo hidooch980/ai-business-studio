@@ -47,6 +47,7 @@ class ReplenishmentInput:
     confirmed_inbound: Decimal = D("0")
     backordered_units: Decimal = D("0")
     lead_time_days: int = 1
+    lead_time_std_days: Decimal = D("0")
     review_period_days: int = 7
     service_level: Decimal = D("0.95")
     minimum_order_quantity: Decimal = D("1")
@@ -94,8 +95,8 @@ def forecast_daily_demand(history: Sequence[DemandPoint]) -> tuple[Decimal, Deci
 
 
 def calculate_replenishment(data: ReplenishmentInput, landed_unit_cost_minor: int) -> ReplenishmentResult:
-    if data.lead_time_days < 0 or data.review_period_days < 0:
-        raise ValueError("lead time and review period cannot be negative")
+    if data.lead_time_days < 0 or data.review_period_days < 0 or data.lead_time_std_days < 0:
+        raise ValueError("lead time, lead-time variability and review period cannot be negative")
     if data.minimum_order_quantity <= 0 or data.order_multiple <= 0:
         raise ValueError("MOQ and order multiple must be positive")
     if landed_unit_cost_minor < 0:
@@ -112,30 +113,39 @@ def calculate_replenishment(data: ReplenishmentInput, landed_unit_cost_minor: in
     lead = D(data.lead_time_days)
     review = D(data.review_period_days)
     inventory_position = data.sellable_on_hand + data.confirmed_inbound - data.reserved_units - data.backordered_units
-    safety_stock = z * demand_stddev * lead.sqrt() if lead else D("0")
+    safety_variance = lead * demand_stddev**2 + forecast**2 * data.lead_time_std_days**2
+    safety_stock = z * safety_variance.sqrt()
     reorder_point = forecast * lead + safety_stock
     target_days = lead + review
     target_stock = forecast * target_days + safety_stock
     raw_need = max(D("0"), target_stock - inventory_position)
 
+    feasible_limit = raw_need
     if data.shelf_life_days is not None:
         if data.shelf_life_days <= 0:
             raise ValueError("shelf life must be positive")
-        raw_need = min(raw_need, forecast * D(data.shelf_life_days))
+        feasible_limit = min(feasible_limit, forecast * D(data.shelf_life_days))
     if data.storage_capacity_units is not None:
         if data.storage_capacity_units < 0:
             raise ValueError("storage capacity cannot be negative")
-        raw_need = min(raw_need, max(D("0"), data.storage_capacity_units - data.sellable_on_hand))
+        feasible_limit = min(feasible_limit, max(D("0"), data.storage_capacity_units - data.sellable_on_hand))
     if data.supplier_capacity_units is not None:
-        raw_need = min(raw_need, data.supplier_capacity_units)
+        feasible_limit = min(feasible_limit, data.supplier_capacity_units)
 
-    quantity = D("0") if raw_need == 0 else max(data.minimum_order_quantity, _ceil_to_multiple(raw_need, data.order_multiple))
-    if landed_unit_cost_minor and data.budget_minor is not None:
+    rounded_up = _ceil_to_multiple(feasible_limit, data.order_multiple) if feasible_limit > 0 else D("0")
+    if rounded_up <= feasible_limit:
+        quantity = rounded_up
+    else:
+        quantity = (feasible_limit / data.order_multiple).to_integral_value(rounding="ROUND_FLOOR") * data.order_multiple
+    if quantity > 0 and quantity < data.minimum_order_quantity:
+        quantity = D("0")
+    if data.budget_minor is not None:
         if data.budget_minor < 0:
             raise ValueError("budget cannot be negative")
-        affordable = D(data.budget_minor) / D(landed_unit_cost_minor)
-        quantity = min(quantity, (affordable / data.order_multiple).to_integral_value(rounding="ROUND_FLOOR") * data.order_multiple)
-        if quantity < data.minimum_order_quantity:
+        if landed_unit_cost_minor > 0:
+            affordable = D(data.budget_minor) / D(landed_unit_cost_minor)
+            quantity = min(quantity, (affordable / data.order_multiple).to_integral_value(rounding="ROUND_FLOOR") * data.order_multiple)
+        elif data.budget_minor == 0:
             quantity = D("0")
     estimated_cost = int(quantity * landed_unit_cost_minor)
     urgency_days = (inventory_position / forecast) if forecast > 0 else D("Infinity")
@@ -176,7 +186,8 @@ def rank_supplier_quotes(quotes: Sequence[SupplierQuote]) -> list[SupplierQuote]
         eligible,
         key=lambda q: (
             D(q.landed_unit_cost_minor)
-            * (D("1") + (D("1") - q.on_time_rate) + (D("1") - q.quality_acceptance_rate)),
+            * (D("1") + (D("1") - q.on_time_rate) + (D("1") - q.quality_acceptance_rate))
+            * (D("1") + q.lead_time_std_days / D(q.lead_time_days + 1)),
             q.lead_time_days,
             -q.payment_terms_days,
             q.supplier_id,
