@@ -1,12 +1,12 @@
 """Add tenant-scoped procurement accounting mappings.
 
-Revision ID: 0018_procurement_accounting_settings
+Revision ID: 0018_proc_acct
 Revises: 0017_purchase_to_pay
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0018_procurement_accounting_settings"
+revision = "0018_proc_acct"
 down_revision = "0017_purchase_to_pay"
 branch_labels = None
 depends_on = None
