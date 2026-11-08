@@ -42,6 +42,9 @@ def restricted_runtime_role():
             "GRANT EXECUTE ON FUNCTION public.resolve_auth_session(bytea) TO retail_session_runtime"
         )
         conn.execute(
+            "GRANT EXECUTE ON FUNCTION public.resolve_auth_session_with_csrf(bytea) TO retail_session_runtime"
+        )
+        conn.execute(
             "GRANT INSERT ON security_audit_events TO retail_session_runtime"
         )
         conn.execute("REVOKE ALL ON auth_sessions FROM retail_session_runtime")
