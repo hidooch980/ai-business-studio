@@ -393,6 +393,32 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
     assert invoice.status_code == 201, invoice.text
     invoice_id = invoice.json()["id"]
 
+    # A second tenant must neither list nor operate on this tenant's invoice.
+    with TestClient(purchasing_client.app) as tenant_b_client:
+        tenant_b_client.headers.update({"Origin": str(tenant_b_client.base_url).rstrip("/")})
+        _, tenant_b_headers = _register_growth(tenant_b_client, "-payables-isolation")
+        tenant_b_invoices = tenant_b_client.get(
+            "/api/v1/procurement/payables/invoices", headers=tenant_b_headers
+        )
+        assert tenant_b_invoices.status_code == 200, tenant_b_invoices.text
+        assert tenant_b_invoices.json()["items"] == []
+        foreign_match = tenant_b_client.post(
+            f"/api/v1/procurement/payables/invoices/{invoice_id}/match",
+            headers=tenant_b_headers,
+        )
+        assert foreign_match.status_code == 404
+        foreign_payment = tenant_b_client.post(
+            f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+            json={
+                "amount_minor": 1,
+                "currency": "USD",
+                "payment_date": "2026-11-08",
+                "payment_reference": "FOREIGN-TENANT-ATTEMPT",
+            },
+            headers={**tenant_b_headers, "Idempotency-Key": "foreign-tenant-payment"},
+        )
+        assert foreign_payment.status_code == 404
+
     matched = purchasing_client.post(
         f"/api/v1/procurement/payables/invoices/{invoice_id}/match",
         headers=headers,
@@ -444,6 +470,24 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
     assert replay.status_code == 201, replay.text
     assert replay.json()["replayed"] is True
     assert replay.json()["journal_entry_id"] == payment.json()["journal_entry_id"]
+
+    conflicting_replay = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+        json={**first_payment_payload, "amount_minor": 999},
+        headers=payment_headers,
+    )
+    assert conflicting_replay.status_code == 409
+    overpayment = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+        json={
+            "amount_minor": 2751,
+            "currency": "USD",
+            "payment_date": "2026-11-08",
+            "payment_reference": "OVERPAYMENT-ATTEMPT",
+        },
+        headers={**headers, "Idempotency-Key": "payables-overpayment-attempt"},
+    )
+    assert overpayment.status_code == 409
 
     final_payment = purchasing_client.post(
         f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
