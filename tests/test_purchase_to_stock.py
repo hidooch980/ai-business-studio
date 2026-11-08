@@ -2,8 +2,8 @@ import os
 import subprocess
 import sys
 from collections.abc import Generator
-from datetime import date
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from uuid import UUID, uuid4
 
 import pytest
