@@ -125,7 +125,7 @@ def test_database_resolver_uses_database_role_and_branch_memberships(auth_record
 
 def test_runtime_can_resolve_hash_but_cannot_read_session_table(auth_records):
     with psycopg.connect(RUNTIME_URL) as conn:
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
             conn.execute("SELECT id FROM auth_sessions").fetchall()
         row = conn.execute(
             "SELECT session_id, tenant_id, identity_id FROM public.resolve_auth_session(%s)",
@@ -145,7 +145,8 @@ def test_expired_and_revoked_sessions_are_rejected(auth_records, mutation):
     with psycopg.connect(DATABASE_URL) as conn:
         if mutation == "expired":
             conn.execute(
-                "UPDATE auth_sessions SET expires_at = now() - interval '1 minute' WHERE id = %s",
+                "UPDATE auth_sessions SET created_at = now() - interval '2 hours', "
+                "expires_at = now() - interval '1 minute' WHERE id = %s",
                 (auth_records["session_id"],),
             )
         else:
