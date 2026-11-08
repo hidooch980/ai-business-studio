@@ -1183,8 +1183,9 @@ def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
             )
             assert logged_out.status_code == 204
             assert "max-age=0" in logged_out.headers.get("set-cookie", "").lower()
+            return rotated_token
 
-    asyncio.run(exercise_endpoints())
+    rotated_token = asyncio.run(exercise_endpoints())
     with pytest.raises(HTTPException) as error:
         _resolve_live(rotated_token)
     assert error.value.status_code == 401
