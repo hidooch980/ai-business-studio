@@ -748,3 +748,180 @@ def test_16_bootstrap_owner_and_runtime_have_no_bypassrls(runtime):
             ("auth_bootstrap_owner", False, False),
             ("retail_runtime", False, False),
         ]
+
+
+def _live_session(token: str, *, expires: str = "1 day", revoked: bool = False):
+    from hashlib import sha256
+    from uuid import uuid4
+
+    session_id = uuid4()
+    token_hash = sha256(token.encode("ascii")).digest()
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        admin.execute(
+            """
+            INSERT INTO auth_sessions
+                (id, tenant_id, identity_id, refresh_token_hash, expires_at, revoked_at)
+            VALUES (%s, %s, %s, %s, now() + %s::interval,
+                    CASE WHEN %s THEN now() ELSE NULL END)
+            """,
+            (session_id, TENANT_A, USER_A, token_hash, expires, revoked),
+        )
+    return session_id
+
+
+def _resolve_live(token: str):
+    from starlette.requests import Request
+
+    from retail_app.api.session_resolver import PostgresSessionResolver
+    from retail_app.infrastructure.database import PostgresDatabase
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/procurement/purchase-orders",
+        "query_string": b"",
+        "headers": [(b"cookie", f"__Host-retail_session={token}".encode("ascii"))],
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 12345),
+        "scheme": "http",
+    })
+    return PostgresSessionResolver(PostgresDatabase(RUNTIME_URL))(request)
+
+
+def test_17_real_postgres_cookie_resolver_reads_current_role_and_branch_memberships():
+    from secrets import token_urlsafe
+
+    token = token_urlsafe(48)
+    session_id = _live_session(token)
+    try:
+        context = _resolve_live(token)
+        assert context.subject_id == str(USER_A)
+        assert context.tenant_id == str(TENANT_A)
+        assert context.role.value == "owner_admin"
+        assert str(BRANCH_A) in context.branch_ids
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
+
+
+@pytest.mark.parametrize("expired,revoked", [(True, False), (False, True)])
+def test_18_real_postgres_resolver_denies_expired_or_revoked_sessions(expired, revoked):
+    from secrets import token_urlsafe
+
+    token = token_urlsafe(48)
+    session_id = _live_session(token, expires="-1 second" if expired else "1 day", revoked=revoked)
+    try:
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as error:
+            _resolve_live(token)
+        assert error.value.status_code == 401
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
+
+
+def test_19_real_postgres_resolver_denies_revoked_membership():
+    from secrets import token_urlsafe
+    from fastapi import HTTPException
+
+    token = token_urlsafe(48)
+    session_id = _live_session(token)
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        admin.execute(
+            "UPDATE tenant_memberships SET status = 'revoked' WHERE tenant_id = %s AND identity_id = %s",
+            (TENANT_A, USER_A),
+        )
+    try:
+        with pytest.raises(HTTPException) as error:
+            _resolve_live(token)
+        assert error.value.status_code == 403
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE tenant_memberships SET status = 'active' WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+            admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
+
+
+def test_20_role_change_between_resolution_and_business_transaction_is_denied():
+    from secrets import token_urlsafe
+    from retail_app.infrastructure.database import PostgresDatabase
+
+    token = token_urlsafe(48)
+    session_id = _live_session(token)
+    database = PostgresDatabase(RUNTIME_URL)
+    try:
+        context = _resolve_live(token)
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE tenant_memberships SET role = 'employee' WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+        with pytest.raises(PermissionError, match="role changed"):
+            with database.tenant_transaction(
+                tenant_id=context.tenant_id,
+                subject_id=context.subject_id,
+                expected_role=context.role.value,
+                expected_branch_ids=context.branch_ids,
+            ):
+                pass
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE tenant_memberships SET role = 'owner_admin' WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+            admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
+
+
+def test_21_real_postgres_cross_tenant_and_branch_revocation_are_denied():
+    from secrets import token_urlsafe
+    from retail_app.infrastructure.database import PostgresDatabase
+
+    token = token_urlsafe(48)
+    session_id = _live_session(token)
+    database = PostgresDatabase(RUNTIME_URL)
+    try:
+        context = _resolve_live(token)
+        with database.tenant_transaction(
+            tenant_id=context.tenant_id,
+            subject_id=context.subject_id,
+            expected_role=context.role.value,
+            expected_branch_ids=context.branch_ids,
+        ) as connection:
+            assert connection.execute("SELECT id FROM tenants WHERE id = %s", (TENANT_B,)).fetchall() == []
+
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE tenant_memberships SET role = 'branch_manager' WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+        branch_context = _resolve_live(token)
+        assert str(BRANCH_A) in branch_context.branch_ids
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                """UPDATE branch_memberships SET status = 'revoked'
+                   WHERE tenant_id = %s AND branch_id = %s AND identity_id = %s""",
+                (TENANT_A, BRANCH_A, USER_A),
+            )
+        with pytest.raises(PermissionError, match="branch membership changed"):
+            with database.tenant_transaction(
+                tenant_id=branch_context.tenant_id,
+                subject_id=branch_context.subject_id,
+                expected_role=branch_context.role.value,
+                expected_branch_ids=branch_context.branch_ids,
+            ):
+                pass
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "UPDATE branch_memberships SET status = 'active' WHERE tenant_id = %s AND branch_id = %s AND identity_id = %s",
+                (TENANT_A, BRANCH_A, USER_A),
+            )
+            admin.execute(
+                "UPDATE tenant_memberships SET role = 'owner_admin' WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+            admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
