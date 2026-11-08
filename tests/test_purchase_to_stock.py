@@ -224,3 +224,142 @@ def test_purchase_order_cannot_be_received_before_approval(purchasing_client: Te
         headers={**headers, "Idempotency-Key": "unapproved-receipt"},
     )
     assert response.status_code == 409
+
+
+
+def test_supplier_invoice_three_way_match_and_quantity_reservation(
+    purchasing_client: TestClient,
+) -> None:
+    _, headers = _register_growth(purchasing_client)
+    supplier = purchasing_client.post(
+        "/api/v1/procurement/suppliers",
+        json={"code": "SUP-INV", "name": "Invoice Supplier"},
+        headers=headers,
+    )
+    product = purchasing_client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "INV-001", "name": "Invoice Item", "unit_code": "pcs"},
+        headers=headers,
+    )
+    warehouse = purchasing_client.post(
+        "/api/v1/inventory/warehouses",
+        json={"code": "INV-MAIN", "name": "Invoice warehouse"},
+        headers=headers,
+    )
+    assert supplier.status_code == product.status_code == warehouse.status_code == 201
+
+    order = purchasing_client.post(
+        "/api/v1/procurement/purchase-orders",
+        json={
+            "supplier_id": supplier.json()["id"],
+            "warehouse_id": warehouse.json()["id"],
+            "lines": [{
+                "product_id": product.json()["id"],
+                "quantity": 10,
+                "unit_cost_minor": 1500,
+            }],
+        },
+        headers=headers,
+    )
+    assert order.status_code == 201, order.text
+    order_id = order.json()["id"]
+    order_line_id = order.json()["lines"][0]["id"]
+    approved = purchasing_client.post(
+        f"/api/v1/procurement/purchase-orders/{order_id}/approve",
+        headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+    receipt = purchasing_client.post(
+        f"/api/v1/procurement/purchase-orders/{order_id}/receipts",
+        json={"lines": [{"purchase_order_line_id": order_line_id, "quantity": 5}]},
+        headers={**headers, "Idempotency-Key": "invoice-test-receipt"},
+    )
+    assert receipt.status_code == 201, receipt.text
+
+    invoice_payload = {
+        "purchase_order_id": order_id,
+        "invoice_number": "SUP-INV-2026-001",
+        "invoice_date": "2026-11-08",
+        "due_date": "2026-12-08",
+        "currency": "USD",
+        "tax_minor": 200,
+        "freight_minor": 50,
+        "discount_minor": 100,
+        "lines": [{
+            "purchase_order_line_id": order_line_id,
+            "quantity": 4,
+            "unit_cost_minor": 1500,
+        }],
+    }
+    invoice = purchasing_client.post(
+        "/api/v1/procurement/supplier-invoices",
+        json=invoice_payload,
+        headers=headers,
+    )
+    assert invoice.status_code == 201, invoice.text
+    invoice_data = invoice.json()
+    assert invoice_data["status"] == "matched"
+    assert invoice_data["subtotal_minor"] == 6000
+    assert invoice_data["total_minor"] == 6150
+
+    overbilled = purchasing_client.post(
+        "/api/v1/procurement/supplier-invoices",
+        json={
+            **invoice_payload,
+            "invoice_number": "SUP-INV-2026-002",
+            "lines": [{
+                "purchase_order_line_id": order_line_id,
+                "quantity": 2,
+                "unit_cost_minor": 1500,
+            }],
+        },
+        headers=headers,
+    )
+    assert overbilled.status_code == 409
+
+    price_mismatch = purchasing_client.post(
+        "/api/v1/procurement/supplier-invoices",
+        json={
+            **invoice_payload,
+            "invoice_number": "SUP-INV-2026-003",
+            "lines": [{
+                "purchase_order_line_id": order_line_id,
+                "quantity": 1,
+                "unit_cost_minor": 1400,
+            }],
+        },
+        headers=headers,
+    )
+    assert price_mismatch.status_code == 409
+
+    voided = purchasing_client.post(
+        f"/api/v1/procurement/supplier-invoices/{invoice_data['id']}/void",
+        headers=headers,
+    )
+    assert voided.status_code == 200, voided.text
+    assert voided.json()["status"] == "void"
+
+    replacement = purchasing_client.post(
+        "/api/v1/procurement/supplier-invoices",
+        json={
+            **invoice_payload,
+            "invoice_number": "SUP-INV-2026-004",
+            "lines": [{
+                "purchase_order_line_id": order_line_id,
+                "quantity": 5,
+                "unit_cost_minor": 1500,
+            }],
+        },
+        headers=headers,
+    )
+    assert replacement.status_code == 201, replacement.text
+    approved_invoice = purchasing_client.post(
+        f"/api/v1/procurement/supplier-invoices/{replacement.json()['id']}/approve",
+        headers=headers,
+    )
+    assert approved_invoice.status_code == 200, approved_invoice.text
+    assert approved_invoice.json()["status"] == "approved"
+
+    balances = purchasing_client.get("/api/v1/inventory/balances", headers=headers)
+    assert balances.status_code == 200, balances.text
+    assert balances.json()["items"][0]["quantity_on_hand"] == 5
