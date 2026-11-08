@@ -193,3 +193,40 @@ class SupplierPayment(Base):
     payment_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class ProcurementAccountingSettings(Base):
+    __tablename__ = "procurement_accounting_settings"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_procurement_accounting_settings_tenant"),
+        CheckConstraint(
+            "inventory_account_code <> grni_account_code "
+            "AND inventory_account_code <> ap_account_code "
+            "AND inventory_account_code <> cash_account_code "
+            "AND grni_account_code <> ap_account_code "
+            "AND grni_account_code <> cash_account_code "
+            "AND ap_account_code <> cash_account_code",
+            name="ck_procurement_accounting_settings_distinct_accounts",
+        ),
+        CheckConstraint("length(base_currency) = 3", name="ck_procurement_accounting_settings_currency"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    inventory_account_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    grni_account_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    ap_account_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    cash_account_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    base_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
