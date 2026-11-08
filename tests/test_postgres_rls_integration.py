@@ -309,3 +309,68 @@ def test_10_domain_events_and_business_audit_are_append_only(runtime):
                 "UPDATE domain_events SET event_type = 'supplier.changed' WHERE id = %s",
                 (event_id,),
             )
+
+
+def test_11_supplier_and_purchase_order_services_commit_atomically_and_replay(runtime):
+    from datetime import date
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.infrastructure.idempotency import IdempotencyConflict
+    from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
+    from retail_app.procurement.service import create_purchase_order, create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier_id = str(uuid4())
+    supplier = Supplier(supplier_id, str(TENANT_A), "Integration Supplier")
+
+    created_supplier = create_supplier(
+        database, actor, supplier, idempotency_key="supplier-integration-0001"
+    )
+    replayed_supplier = create_supplier(
+        database, actor, supplier, idempotency_key="supplier-integration-0001"
+    )
+    assert replayed_supplier == created_supplier
+
+    with pytest.raises(IdempotencyConflict):
+        create_supplier(
+            database, actor,
+            Supplier(supplier_id, str(TENANT_A), "Changed Supplier Name"),
+            idempotency_key="supplier-integration-0001",
+        )
+
+    order = PurchaseOrder(
+        id=str(uuid4()),
+        tenant_id=str(TENANT_A),
+        branch_id=str(BRANCH_A),
+        supplier_id=supplier_id,
+        currency="EUR",
+        order_date=__import__("datetime").date(2026, 11, 8),
+        lines=(PurchaseOrderLine(1, str(uuid4()), "Test item", 2000, 125),),
+        order_number="PO-INTEGRATION-0001",
+    )
+    created_order = create_purchase_order(
+        database, actor, order, idempotency_key="purchase-order-integration-01"
+    )
+    replayed_order = create_purchase_order(
+        database, actor, order, idempotency_key="purchase-order-integration-01"
+    )
+    assert replayed_order == created_order
+    assert created_order["total_minor"] == 250
+
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        assert runtime.execute(
+            "SELECT count(*) FROM suppliers WHERE id = %s", (supplier_id,)
+        ).fetchone()[0] == 1
+        assert runtime.execute(
+            "SELECT count(*) FROM purchase_order_lines WHERE purchase_order_id = %s",
+            (order.id,),
+        ).fetchone()[0] == 1
+        assert runtime.execute(
+            "SELECT count(*) FROM audit_events WHERE resource_id IN (%s, %s)",
+            (supplier_id, order.id),
+        ).fetchone()[0] == 2
