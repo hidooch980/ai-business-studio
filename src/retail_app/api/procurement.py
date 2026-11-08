@@ -3,14 +3,13 @@
 The host application must inject an AccessContext resolved from its authenticated
 session/membership layer. Tenant and role are never accepted from request bodies.
 """
-from __future__ import annotations
-
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from typing import Annotated
 
 from retail_app.procurement import chain
 from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
@@ -135,7 +134,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
     def create_supplier_endpoint(
         body: SupplierCreateInput,
         request: Request,
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     ):
         supplier = Supplier(
@@ -152,7 +151,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
     def create_purchase_order_endpoint(
         body: PurchaseOrderCreateInput,
         request: Request,
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     ):
         order = PurchaseOrder(
@@ -168,7 +167,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
 
     @router.get("/purchase-orders")
     def purchase_orders(
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         branch_id: str | None = None,
         status: str | None = None,
         limit: int = Query(50, ge=1, le=200),
@@ -179,7 +178,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
         ))
 
     @router.get("/purchase-orders/{order_id}")
-    def purchase_order(order_id: str, context: AccessContext = Depends(context_dependency)):
+    def purchase_order(order_id: str, context: Annotated[AccessContext, Depends(context_dependency)]):
         return _run(lambda: chain.get_purchase_order(database, context, order_id))
 
     @router.patch("/purchase-orders/{order_id}")
@@ -187,7 +186,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
         order_id: str,
         body: PurchaseOrderUpdateInput,
         request: Request,
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     ):
         return _run(lambda: chain.update_draft_purchase_order(
@@ -201,7 +200,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
     def approve_purchase_order(
         order_id: str,
         request: Request,
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     ):
         return _run(lambda: chain.approve_purchase_order(
@@ -214,7 +213,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
         order_id: str,
         body: GoodsReceiptInput,
         request: Request,
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     ):
         return _run(lambda: chain.receive_goods(
@@ -228,7 +227,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
     def match_invoice(
         body: SupplierInvoiceMatchInput,
         request: Request,
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     ):
         return _run(lambda: chain.match_supplier_invoice(
@@ -242,9 +241,9 @@ def create_procurement_router(database: object, context_dependency: Callable[...
 
     @router.get("/inventory/stock")
     def inventory_stock(
+        context: Annotated[AccessContext, Depends(context_dependency)],
         branch_id: str,
         item_id: str,
-        context: AccessContext = Depends(context_dependency),
     ):
         return _run(lambda: chain.get_stock_balance(
             database, context, branch_id=branch_id, item_id=item_id
@@ -252,7 +251,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
 
     @router.get("/accounts-payable")
     def accounts_payable(
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         supplier_id: str | None = None,
         due_before: date | None = None,
         limit: int = Query(100, ge=1, le=200),
@@ -265,7 +264,7 @@ def create_procurement_router(database: object, context_dependency: Callable[...
     def post_supplier_payment(
         body: SupplierPaymentInput,
         request: Request,
-        context: AccessContext = Depends(context_dependency),
+        context: Annotated[AccessContext, Depends(context_dependency)],
         idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     ):
         return _run(lambda: chain.record_supplier_payment(
