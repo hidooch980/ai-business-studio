@@ -245,6 +245,89 @@ class SessionService:
                 )
             return result.rowcount == 1
 
+    def list_sessions(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        current_session_id: str,
+        session_token_hash: bytes,
+        expected_role: str,
+        expected_branch_ids: frozenset[str],
+    ) -> list[dict[str, object]]:
+        """List only the authenticated subject's recent sessions."""
+        with self.database.tenant_transaction(
+            tenant_id=tenant_id,
+            subject_id=subject_id,
+            expected_role=expected_role,
+            expected_branch_ids=expected_branch_ids,
+            session_id=current_session_id,
+            session_token_hash=session_token_hash,
+        ) as connection:
+            rows = connection.execute(
+                """SELECT id, created_at, last_seen_at, expires_at, revoked_at,
+                          device_label
+                   FROM auth_sessions
+                   WHERE tenant_id = %s AND identity_id = %s
+                     AND expires_at > statement_timestamp()
+                   ORDER BY last_seen_at DESC
+                   LIMIT 50""",
+                (tenant_id, subject_id),
+            ).fetchall()
+        return [
+            {
+                "id": str(row[0]),
+                "created_at": row[1].isoformat(),
+                "last_seen_at": row[2].isoformat(),
+                "expires_at": row[3].isoformat(),
+                "revoked": row[4] is not None,
+                "device_label": row[5],
+                "current": str(row[0]) == current_session_id,
+            }
+            for row in rows
+        ]
+
+    def revoke_session(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        current_session_id: str,
+        session_token_hash: bytes,
+        expected_role: str,
+        expected_branch_ids: frozenset[str],
+        target_session_id: str,
+    ) -> bool:
+        """Revoke one session owned by the authenticated subject, never another user."""
+        with self.database.tenant_transaction(
+            tenant_id=tenant_id,
+            subject_id=subject_id,
+            expected_role=expected_role,
+            expected_branch_ids=expected_branch_ids,
+            session_id=current_session_id,
+            session_token_hash=session_token_hash,
+        ) as connection:
+            result = connection.execute(
+                """UPDATE auth_sessions
+                   SET revoked_at = statement_timestamp()
+                   WHERE id = %s AND tenant_id = %s AND identity_id = %s
+                     AND revoked_at IS NULL
+                   RETURNING id""",
+                (target_session_id, tenant_id, subject_id),
+            )
+            revoked = result.fetchone()
+            if revoked is None:
+                return False
+            _record_security_event(
+                connection,
+                tenant_id=tenant_id,
+                subject_id=subject_id,
+                event_type="session.revoked_selected",
+                outcome="success",
+                metadata={"session_id": str(revoked[0])},
+            )
+            return True
+
     def revoke_all(self, *, tenant_id: str, subject_id: str) -> int:
         """Revoke every active session for a previously authenticated subject."""
         with self.database.transaction() as connection:
