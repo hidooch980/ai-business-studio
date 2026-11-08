@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
 from backend.app.db.session import build_engine, get_db_session
-from backend.app.identity.models import AuditEvent
+from backend.app.identity.models import AuditEvent, JournalEntry, JournalLine
 from backend.app.inventory.models import InventoryMovement
 from backend.app.main import create_app
 from backend.app.procurement.models import (
@@ -78,6 +78,33 @@ def _register_growth(client: TestClient, suffix: str = "") -> tuple[str, dict[st
     }
     upgraded = client.put("/api/v1/modules/edition", json={"edition": "growth"}, headers=headers)
     assert upgraded.status_code == 200, upgraded.text
+    accounts = [
+        {"code": "1400", "name": "Inventory", "account_type": "asset"},
+        {"code": "1490", "name": "Goods Received Not Invoiced", "account_type": "liability"},
+        {"code": "2100", "name": "Accounts Payable", "account_type": "liability"},
+        {"code": "1000", "name": "Operating Bank", "account_type": "asset"},
+    ]
+    for account in accounts:
+        response = client.post("/api/v1/finance/accounts", json=account, headers=headers)
+        assert response.status_code == 201, response.text
+    period = client.post(
+        "/api/v1/finance/periods",
+        json={"name": "FY-2026", "start_date": "2026-01-01", "end_date": "2027-12-31"},
+        headers=headers,
+    )
+    assert period.status_code == 201, period.text
+    settings = client.put(
+        "/api/v1/procurement/accounting-settings",
+        json={
+            "inventory_account_code": "1400",
+            "grni_account_code": "1490",
+            "ap_account_code": "2100",
+            "cash_account_code": "1000",
+            "base_currency": "USD",
+        },
+        headers=headers,
+    )
+    assert settings.status_code == 200, settings.text
     return tenant_id, headers
 
 
@@ -202,6 +229,29 @@ def test_purchase_to_stock_partial_receipt_and_idempotency(purchasing_client: Te
         assert len(movements) == 2
         assert len(receipts) == 2
         assert len(audits) == 4
+        receipt_journals = db.scalars(
+            select(JournalEntry).where(
+                JournalEntry.tenant_id == tenant_uuid,
+                JournalEntry.description.like("Goods received for %"),
+            )
+        ).all()
+        assert len(receipt_journals) == 2
+        assert sum(item.debit_total_minor for item in receipt_journals) == 10_000
+        assert all(item.debit_total_minor == item.credit_total_minor for item in receipt_journals)
+        inventory_lines = db.scalars(
+            select(JournalLine).where(
+                JournalLine.tenant_id == tenant_uuid,
+                JournalLine.account_code == "1400",
+            )
+        ).all()
+        grni_lines = db.scalars(
+            select(JournalLine).where(
+                JournalLine.tenant_id == tenant_uuid,
+                JournalLine.account_code == "1490",
+            )
+        ).all()
+        assert sum(line.debit_minor for line in inventory_lines) == 10_000
+        assert sum(line.credit_minor for line in grni_lines) == 10_000
 
 
 def test_purchase_order_cannot_be_received_before_approval(purchasing_client: TestClient) -> None:
@@ -413,6 +463,22 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         assert saved_invoice.paid_minor == 3750
         assert saved_invoice.status == "paid"
         assert len(payments) == 2
+        journals = db.scalars(select(JournalEntry).where(JournalEntry.tenant_id == UUID(tenant_id))).all()
+        assert len(journals) == 4
+        assert sum(item.debit_total_minor for item in journals) == 7_500
+        assert sum(item.credit_total_minor for item in journals) == 7_500
+        payable_debits = db.scalars(select(JournalLine).where(
+            JournalLine.tenant_id == UUID(tenant_id),
+            JournalLine.account_code == "2100",
+            JournalLine.debit_minor > 0,
+        )).all()
+        payable_credits = db.scalars(select(JournalLine).where(
+            JournalLine.tenant_id == UUID(tenant_id),
+            JournalLine.account_code == "2100",
+            JournalLine.credit_minor > 0,
+        )).all()
+        assert sum(line.debit_minor for line in payable_debits) == 3_750
+        assert sum(line.credit_minor for line in payable_credits) == 3_750
 
 
 
