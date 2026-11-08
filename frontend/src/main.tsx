@@ -19,8 +19,18 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
     });
 
     navigator.serviceWorker.register(workerUrl, { scope: "./", updateViaCache: "none" })
-      .then((registration) => registration.update())
-      .catch((error: unknown) => console.error("Automatic app update check failed", error));
+      .then((registration) => {
+        const checkForUpdate = () => {
+          if (document.visibilityState === "visible") {
+            registration.update().catch((error: unknown) =>
+              console.error("Automatic app update check failed", error));
+          }
+        };
+        checkForUpdate();
+        window.setInterval(checkForUpdate, 60 * 60 * 1000);
+        document.addEventListener("visibilitychange", checkForUpdate);
+      })
+      .catch((error: unknown) => console.error("Service worker registration failed", error));
   });
 }
 
