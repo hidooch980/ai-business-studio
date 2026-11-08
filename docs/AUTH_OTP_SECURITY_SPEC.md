@@ -1,6 +1,6 @@
 # Authentication, OTP and Session Security Specification
 
-Status: approved security design; runtime authentication and provider delivery are not yet implemented.
+Status: the provider-agnostic OTP orchestration core is implemented in `src/retail_app/security/otp.py` with unit tests. PostgreSQL persistence, distributed throttling, production delivery adapters and FastAPI routes are not yet implemented.
 
 ## 1. Authentication decision
 - Primary sign-in: phone number plus one-time password (OTP).
