@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     application.include_router(finance_reports_router, prefix="/api/v1")
     application.include_router(inventory_router, prefix="/api/v1")
     application.include_router(procurement_router, prefix="/api/v1")
+    application.include_router(payables_router, prefix="/api/v1")
     return application
 
 
