@@ -7,16 +7,22 @@ function for locating a session by SHA-256 token hash before tenant context is
 known. The function is `SECURITY DEFINER`, has a fixed search path, returns no
 token hash, and is executable only by the configured runtime role.
 
-The function owner is a NOLOGIN role without BYPASSRLS, but it receives SELECT
-privileges only on the six required columns of `auth_sessions`; it has no
+The function owner is a NOLOGIN role without BYPASSRLS. A role-specific RLS
+policy permits it to SELECT only the six required columns of `auth_sessions`;
+a second role-specific policy permits INSERT only into
+`auth_session_lookup_audit`. It cannot read that audit table and has no
 privileges on identities, tenants, memberships, finance, procurement, or other
 tables. Runtime is not a member of that owner role and must not be granted
 membership in it.
 
-After lookup, the application opens a separate transaction using the ordinary
-runtime role, sets transaction-local `app.tenant_id` and `app.subject_id`,
-and loads active identity, tenant membership, role and active branch
-memberships under existing forced RLS policies. Client-supplied tenant, role,
+The lookup function checks revocation and expiry using PostgreSQL's clock and
+records `matched`, `unknown`, `expired`, or `revoked` outcomes without
+storing token material. After a valid lookup, the application opens a separate
+transaction using the ordinary runtime role, sets transaction-local
+`app.tenant_id` and `app.subject_id`, and loads active identity, tenant
+membership, role and active branch memberships under existing forced RLS
+policies. Successful and denied membership resolution is recorded in the
+tenant-scoped `security_audit_events` table. Client-supplied tenant, role,
 subject and branch values are never consulted.
 
 ## Runtime role provisioning
