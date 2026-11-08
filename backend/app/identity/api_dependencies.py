@@ -10,7 +10,14 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.identity.authorization import membership_has_permission
-from backend.app.identity.models import Membership, Tenant, TenantModuleEntitlement, User, UserSession
+from backend.app.identity.models import (
+    Membership,
+    Tenant,
+    TenantModuleEntitlement,
+    TenantSubscription,
+    User,
+    UserSession,
+)
 from backend.app.identity.security import verify_csrf_token
 from backend.app.identity.service import get_active_session
 from backend.app.modules.registry import MODULE_BY_ID, ModuleStatus
@@ -173,6 +180,17 @@ def require_module(module_id: str, permission_code: str):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
         if definition.status is ModuleStatus.PLANNED:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Module is not released")
+        subscription_active = db.scalar(
+            select(TenantSubscription.id).where(
+                TenantSubscription.tenant_id == tenant_principal.tenant.id,
+                TenantSubscription.status == "active",
+            )
+        )
+        if subscription_active is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant subscription is not active",
+            )
         required = {module_id}
         pending = list(definition.dependencies)
         while pending:
