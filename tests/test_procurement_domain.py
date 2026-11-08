@@ -21,6 +21,7 @@ def test_purchase_order_calculates_exact_minor_unit_total():
         supplier_id="s-1",
         currency="EUR",
         order_date=date(2026, 11, 8),
+        order_number="PO-001",
         lines=(
             PurchaseOrderLine(1, "item-1", "Bolts", 2000, 125),
             PurchaseOrderLine(2, "item-2", "Nuts", 1000, 75),
@@ -41,12 +42,12 @@ def test_purchase_order_rejects_duplicate_line_numbers():
         PurchaseOrderLine(1, "item-2", "Part B", 1000, 20),
     )
     with pytest.raises(ValueError, match="unique"):
-        PurchaseOrder("po-1", "t-1", "b-1", "s-1", "EUR", date(2026, 11, 8), lines)
+        PurchaseOrder("po-1", "t-1", "b-1", "s-1", "EUR", date(2026, 11, 8), lines, "PO-001")
 
 
 def test_purchase_order_requires_currency_and_lines():
     with pytest.raises(ValueError):
         PurchaseOrder("po-1", "t-1", "b-1", "s-1", "EURO", date(2026, 11, 8),
-                      (PurchaseOrderLine(1, "i", "Part", 1000, 1),))
+                      (PurchaseOrderLine(1, "i", "Part", 1000, 1),), "PO-002")
     with pytest.raises(ValueError):
-        PurchaseOrder("po-2", "t-1", "b-1", "s-1", "EUR", date(2026, 11, 8), ())
+        PurchaseOrder("po-2", "t-1", "b-1", "s-1", "EUR", date(2026, 11, 8), (), "PO-003")
