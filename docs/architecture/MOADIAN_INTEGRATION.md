@@ -5,7 +5,7 @@ The Moadian module stores a tenant-scoped connection profile per tax-memory UID 
 - `direct`: the taxpayer signs and submits using taxpayer-owned signing material.
 - `tsp`: an approved tax-service provider submits through its own integration contract.
 
-Only secret-manager references are stored in PostgreSQL. Private keys, certificates, API tokens, and passwords must never be sent to this API or committed to Git. The API response intentionally does not disclose secret references.
+Only opaque logical secret-manager references using the `secret://` scheme are accepted and stored in PostgreSQL; raw PEM, certificate, API-token, and password values are rejected by request validation. Private keys, certificates, API tokens, and passwords must never be sent to this API or committed to Git. The API response intentionally does not disclose secret references.
 
 Each profile starts in the sandbox environment and disabled. Enabling a direct profile requires private-key and certificate references. Enabling a TSP profile requires a provider code and provider-credential reference. Tenant boundaries are enforced on every read and write.
 
