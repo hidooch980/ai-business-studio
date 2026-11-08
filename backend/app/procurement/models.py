@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -108,5 +109,87 @@ class ProcurementReceipt(Base):
     purchase_order_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+
+class SupplierInvoice(Base):
+    __tablename__ = "supplier_invoices"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_supplier_invoices_tenant_id_id"),
+        UniqueConstraint("tenant_id", "supplier_id", "invoice_number", name="uq_supplier_invoice_vendor_number"),
+        CheckConstraint(
+            "status IN ('draft', 'matched', 'approved', 'posted', 'partially_paid', 'paid', 'void')",
+            name="ck_supplier_invoices_status",
+        ),
+        CheckConstraint("total_minor >= 0 AND paid_minor >= 0 AND paid_minor <= total_minor",
+                        name="ck_supplier_invoice_amounts"),
+        ForeignKeyConstraint(["tenant_id", "supplier_id"], ["suppliers.tenant_id", "suppliers.id"],
+                             ondelete="RESTRICT"),
+        ForeignKeyConstraint(["tenant_id", "purchase_order_id"],
+                             ["purchase_orders.tenant_id", "purchase_orders.id"], ondelete="RESTRICT"),
+        Index("ix_supplier_invoices_tenant_status_due", "tenant_id", "status", "due_date"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
+    supplier_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    purchase_order_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    invoice_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    invoice_date: Mapped[date] = mapped_column(Date, nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    total_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    paid_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class SupplierInvoiceLine(Base):
+    __tablename__ = "supplier_invoice_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "supplier_invoice_id"],
+                             ["supplier_invoices.tenant_id", "supplier_invoices.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["tenant_id", "purchase_order_line_id"],
+                             ["purchase_order_lines.tenant_id", "purchase_order_lines.id"], ondelete="RESTRICT"),
+        CheckConstraint("quantity > 0", name="ck_supplier_invoice_line_quantity"),
+        CheckConstraint("unit_cost_minor >= 0", name="ck_supplier_invoice_line_cost"),
+        UniqueConstraint("tenant_id", "supplier_invoice_id", "purchase_order_line_id",
+                         name="uq_supplier_invoice_line_po_line"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
+    supplier_invoice_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    purchase_order_line_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    unit_cost_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class SupplierPayment(Base):
+    __tablename__ = "supplier_payments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_supplier_payment_tenant_idempotency"),
+        ForeignKeyConstraint(["tenant_id", "supplier_invoice_id"],
+                             ["supplier_invoices.tenant_id", "supplier_invoices.id"], ondelete="RESTRICT"),
+        CheckConstraint("amount_minor > 0", name="ck_supplier_payment_amount_positive"),
+        CheckConstraint("length(trim(idempotency_key)) > 0", name="ck_supplier_payment_idempotency_nonempty"),
+        Index("ix_supplier_payments_tenant_invoice_date", "tenant_id", "supplier_invoice_id", "payment_date"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
+    supplier_invoice_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payment_reference: Mapped[str] = mapped_column(String(120), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    payment_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
