@@ -48,6 +48,8 @@ def postgres_schema():
             "0002_transactional_infrastructure.sql",
             "0003_suppliers_purchase_orders.sql",
             "0004_receipts_invoices_payments.sql",
+            "0005_restricted_session_lookup.sql",
+            "0006_otp_sessions_csrf.sql",
         ]
         conn.execute("GRANT USAGE ON SCHEMA public TO retail_runtime")
         conn.execute(
@@ -147,7 +149,7 @@ def test_1_migration_applies_and_forces_rls_on_all_scoped_tables():
             WHERE c.relname IN (
                 'tenants', 'branches', 'identities', 'tenant_memberships',
                 'branch_memberships', 'auth_sessions', 'otp_challenges',
-                'security_audit_events', 'idempotency_records', 'domain_events',
+                'security_audit_events', 'auth_session_lookup_audit', 'idempotency_records', 'domain_events',
                 'outbox_messages', 'audit_events', 'suppliers', 'purchase_orders',
                 'purchase_order_lines', 'goods_receipts', 'goods_receipt_lines',
                 'inventory_movements', 'supplier_invoices', 'supplier_invoice_lines', 'accounts_payable',
@@ -155,7 +157,7 @@ def test_1_migration_applies_and_forces_rls_on_all_scoped_tables():
             )
             """
         ).fetchall()
-    assert len(rows) == 24
+    assert len(rows) == 25
     assert all(forced for _, forced in rows)
 
 
@@ -695,3 +697,134 @@ def test_16_short_and_rejected_delivery_only_adds_accepted_quantity_to_stock(run
     assert receipt["discrepancies"]
     stock = get_stock_balance(database, actor, branch_id=str(BRANCH_A), item_id=item_id)
     assert stock["on_hand_quantity_milli"] == 800
+
+
+def test_17_otp_challenge_is_rate_limited_and_consumed_atomically(runtime):
+    import hashlib
+    from uuid import uuid4
+
+    challenge_id = uuid4()
+    fingerprint = hashlib.sha256(b"otp-test-identifier").digest()
+    valid_code_hmac = hashlib.sha256(b"valid-code-hmac").digest()
+    invalid_code_hmac = hashlib.sha256(b"invalid-code-hmac").digest()
+    with runtime.transaction():
+        destination = runtime.execute(
+            "SELECT public.issue_auth_otp(%s, %s, %s, %s, %s)",
+            (challenge_id, "+12025550101", fingerprint, valid_code_hmac, "sms"),
+        ).fetchone()[0]
+        assert destination == "+12025550101"
+        assert runtime.execute(
+            "SELECT public.consume_auth_otp(%s, %s, %s)",
+            (challenge_id, fingerprint, invalid_code_hmac),
+        ).fetchone()[0] is None
+        assert runtime.execute(
+            "SELECT public.consume_auth_otp(%s, %s, %s)",
+            (challenge_id, fingerprint, valid_code_hmac),
+        ).fetchone()[0] == USER_A
+        assert runtime.execute(
+            "SELECT public.consume_auth_otp(%s, %s, %s)",
+            (challenge_id, fingerprint, valid_code_hmac),
+        ).fetchone()[0] is None
+
+
+def test_18_complete_otp_login_session_rotation_and_logout():
+    import hashlib
+
+    from fastapi.testclient import TestClient
+
+    from retail_app.api.host import create_app
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.auth_service import AuthService, OTPDelivery
+
+    class CapturingDelivery(OTPDelivery):
+        code = None
+
+        def send(self, *, channel: str, destination: str, code: str) -> None:
+            assert channel == "sms"
+            assert destination == "+12025550101"
+            self.code = code
+
+    database = PostgresDatabase(RUNTIME_URL)
+    delivery = CapturingDelivery()
+    service = AuthService(
+        database,
+        otp_hmac_secret=b"test-otp-hmac-secret-material-32-bytes",
+        otp_delivery=delivery,
+    )
+    app = create_app(database, auth_service=service)
+    with TestClient(app, base_url="https://testserver") as client:
+        identifier = "+12025550101"
+        requested = client.post(
+            "/api/auth/otp/request",
+            json={"identifier": identifier},
+            headers={"Origin": "https://testserver"},
+        )
+        assert requested.status_code == 202
+        challenge_id = requested.json()["challenge_id"]
+        assert delivery.code is not None
+
+        verified = client.post(
+            "/api/auth/otp/verify",
+            json={
+                "identifier": identifier,
+                "challenge_id": challenge_id,
+                "code": delivery.code,
+                "tenant_id": str(TENANT_A),
+            },
+            headers={"Origin": "https://testserver"},
+        )
+        assert verified.status_code == 200
+        assert "authenticated" == verified.json()["status"]
+        cookie_headers = verified.headers.get("set-cookie", "").lower()
+        assert "httponly" in cookie_headers
+        assert "secure" in cookie_headers
+        assert "samesite=strict" in cookie_headers
+
+        old_token = client.cookies.get("__Host-retail_session")
+        csrf_token = client.cookies.get("__Host-retail_csrf")
+        assert old_token and csrf_token
+        old_hash = hashlib.sha256(old_token.encode()).digest()
+        assert client.get("/api/procurement/purchase-orders").status_code == 200
+
+        # Cookie-authenticated writes fail closed without the CSRF header.
+        assert client.post("/api/auth/session/rotate").status_code == 403
+        rotated = client.post(
+            "/api/auth/session/rotate",
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert rotated.status_code == 200
+        rotated_token = client.cookies.get("__Host-retail_session")
+        rotated_csrf = client.cookies.get("__Host-retail_csrf")
+        assert rotated_token and rotated_csrf and rotated_token != old_token
+
+        with psycopg.connect(DATABASE_URL) as conn:
+            old_session_id, old_revoked = conn.execute(
+                "SELECT id, revoked_at IS NOT NULL FROM auth_sessions WHERE refresh_token_hash = %s",
+                (old_hash,),
+            ).fetchone()
+            rotated_hash = hashlib.sha256(rotated_token.encode()).digest()
+            new_session_id, parent_id, rotated_csrf_hash = conn.execute(
+                """
+                SELECT id, rotated_from_session_id, csrf_token_hash
+                FROM auth_sessions WHERE refresh_token_hash = %s
+                """,
+                (rotated_hash,),
+            ).fetchone()
+        assert old_revoked is True
+        assert parent_id == old_session_id
+        assert rotated_csrf_hash == hashlib.sha256(rotated_csrf.encode()).digest()
+        assert client.get("/api/procurement/purchase-orders").status_code == 200
+
+        logged_out = client.post(
+            "/api/auth/logout",
+            headers={"X-CSRF-Token": rotated_csrf},
+        )
+        assert logged_out.status_code == 200
+        with psycopg.connect(DATABASE_URL) as conn:
+            assert conn.execute(
+                "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE id = %s",
+                (new_session_id,),
+            ).fetchone()[0] is True
+        assert client.get("/api/procurement/purchase-orders").status_code == 401
+
+

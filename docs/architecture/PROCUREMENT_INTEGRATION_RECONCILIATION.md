@@ -25,7 +25,7 @@ Sales, cash register and POS remain explicitly out of scope until the entire pur
 
 - `0002_transactional_infrastructure.sql`: tenant-scoped idempotency, domain events, outbox and audit.
 - `0003_suppliers_purchase_orders.sql`: suppliers, purchase orders and lines.
-- `0004_receipts_invoices_payments.sql`: goods receipts and discrepancy lines, supplier invoices and invoice lines, accounts payable, supplier payments, payment allocations and double-entry ledger lines.
+- `0004_receipts_invoices_payments.sql`: goods receipts and discrepancy lines, supplier invoices and invoice lines, accounts payable, supplier payments, payment allocations and double-entry ledger lines.\n- `0005_restricted_session_lookup.sql`: narrowly scoped pre-RLS session lookup function, NOLOGIN BYPASSRLS function owner with only session-column SELECT and lookup-audit INSERT, and forced-RLS lookup audit table.
 - All new tenant tables enable and force RLS with transaction-local tenant context.
 - Invoice lines have a composite foreign key to the exact PO line and receipt line to prevent cross-order/line matching.
 
