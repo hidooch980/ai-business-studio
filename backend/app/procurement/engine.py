@@ -5,9 +5,9 @@ same rules can be tested, backtested, and used as a safe fallback.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
-from collections.abc import Sequence
 from statistics import mean, pstdev
 
 D = Decimal
