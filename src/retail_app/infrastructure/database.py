@@ -4,8 +4,9 @@ The tenant ID must come from a trusted AccessContext, never directly from reques
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator, Protocol
+from typing import Protocol
 
 
 class TransactionConnection(Protocol):
@@ -37,9 +38,8 @@ class PostgresDatabase:
     @contextmanager
     def transaction(self) -> Iterator[TransactionConnection]:
         """Yield one connection; commit on success and rollback on exception."""
-        with self._connect() as connection:
-            with connection.transaction():
-                yield connection
+        with self._connect() as connection, connection.transaction():
+            yield connection
 
     @contextmanager
     def tenant_transaction(
