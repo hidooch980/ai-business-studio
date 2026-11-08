@@ -45,7 +45,16 @@ by the deployed application; do not use blanket table grants in production.
 
 ## FastAPI wiring
 
-Create the database adapter from a secret-managed DSN and expose the factory:
+Install the server extra and start the executable FastAPI host with the
+restricted Runtime DSN:
+
+```bash
+pip install -e ".[server]"
+export DATABASE_URL="postgresql://retail_runtime:<managed-secret>@<db-host>:5432/<db-name>"
+uvicorn retail_app.main:app --host 0.0.0.0 --port 8000
+```
+
+The equivalent factory remains available for embedding:
 
 ```python
 from retail_app.api.host import create_app
