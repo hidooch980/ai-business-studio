@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Generator
 from uuid import UUID
 
@@ -141,6 +142,18 @@ def test_purchase_to_stock_partial_receipt_and_idempotency(purchasing_client: Te
     )
     assert replay.status_code == 201, replay.text
     assert replay.json()["replayed"] is True
+
+    def replay_receipt() -> tuple[int, bool]:
+        response = purchasing_client.post(
+            f"/api/v1/procurement/purchase-orders/{order_data['id']}/receipts",
+            json=receipt_payload,
+            headers=receipt_headers,
+        )
+        return response.status_code, response.json().get("replayed", False)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        concurrent_replays = list(pool.map(lambda _: replay_receipt(), range(6)))
+    assert concurrent_replays == [(201, True)] * 6
 
     conflicting_replay = purchasing_client.post(
         f"/api/v1/procurement/purchase-orders/{order_data['id']}/receipts",
