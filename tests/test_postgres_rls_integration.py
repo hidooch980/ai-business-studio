@@ -730,9 +730,11 @@ def test_17_otp_challenge_is_rate_limited_and_consumed_atomically(runtime):
 def test_18_complete_otp_login_session_rotation_and_logout():
     import hashlib
 
+    from fastapi.testclient import TestClient
+
+    from retail_app.api.host import create_app
     from retail_app.infrastructure.database import PostgresDatabase
     from retail_app.security.auth_service import AuthService, OTPDelivery
-    from retail_app.security.authorization import AccessContext, Role
 
     class CapturingDelivery(OTPDelivery):
         code = None
@@ -742,52 +744,87 @@ def test_18_complete_otp_login_session_rotation_and_logout():
             assert destination == "+12025550101"
             self.code = code
 
+    database = PostgresDatabase(RUNTIME_URL)
     delivery = CapturingDelivery()
     service = AuthService(
-        PostgresDatabase(RUNTIME_URL),
+        database,
         otp_hmac_secret=b"test-otp-hmac-secret-material-32-bytes",
         otp_delivery=delivery,
     )
-    identifier = "+12025550101"
-    challenge_id = service.request_otp(identifier)
-    assert delivery.code is not None
-    raw_token, csrf_token = service.verify_otp(
-        challenge_id=challenge_id,
-        identifier=identifier,
-        code=delivery.code,
-        tenant_id=str(TENANT_A),
-    )
-    old_hash = hashlib.sha256(raw_token.encode()).digest()
-    with psycopg.connect(DATABASE_URL) as conn:
-        old_session_id, stored_csrf_hash = conn.execute(
-            "SELECT id, csrf_token_hash FROM auth_sessions WHERE refresh_token_hash = %s",
-            (old_hash,),
-        ).fetchone()
-    assert stored_csrf_hash == hashlib.sha256(csrf_token.encode()).digest()
+    app = create_app(database, auth_service=service)
+    with TestClient(app, base_url="https://testserver") as client:
+        identifier = "+12025550101"
+        requested = client.post(
+            "/api/auth/otp/request",
+            json={"identifier": identifier},
+            headers={"Origin": "https://testserver"},
+        )
+        assert requested.status_code == 202
+        challenge_id = requested.json()["challenge_id"]
+        assert delivery.code is not None
 
-    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
-    rotated_token, rotated_csrf = service.rotate_session(actor, str(old_session_id))
-    rotated_hash = hashlib.sha256(rotated_token.encode()).digest()
-    with psycopg.connect(DATABASE_URL) as conn:
-        old_revoked = conn.execute(
-            "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE id = %s",
-            (old_session_id,),
-        ).fetchone()[0]
-        new_session_id = conn.execute(
-            "SELECT id FROM auth_sessions WHERE refresh_token_hash = %s",
-            (rotated_hash,),
-        ).fetchone()[0]
-        parent_id, rotated_csrf_hash = conn.execute(
-            "SELECT rotated_from_session_id, csrf_token_hash FROM auth_sessions WHERE id = %s",
-            (new_session_id,),
-        ).fetchone()
-    assert rotated_csrf_hash == hashlib.sha256(rotated_csrf.encode()).digest()
-    assert old_revoked is True
-    assert parent_id == old_session_id
+        verified = client.post(
+            "/api/auth/otp/verify",
+            json={
+                "identifier": identifier,
+                "challenge_id": challenge_id,
+                "code": delivery.code,
+                "tenant_id": str(TENANT_A),
+            },
+            headers={"Origin": "https://testserver"},
+        )
+        assert verified.status_code == 200
+        assert "authenticated" == verified.json()["status"]
+        cookie_headers = verified.headers.get("set-cookie", "").lower()
+        assert "httponly" in cookie_headers
+        assert "secure" in cookie_headers
+        assert "samesite=strict" in cookie_headers
 
-    service.revoke_session(actor, str(new_session_id))
-    with psycopg.connect(DATABASE_URL) as conn:
-        assert conn.execute(
-            "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE id = %s",
-            (new_session_id,),
-        ).fetchone()[0] is True
+        old_token = client.cookies.get("__Host-retail_session")
+        csrf_token = client.cookies.get("__Host-retail_csrf")
+        assert old_token and csrf_token
+        old_hash = hashlib.sha256(old_token.encode()).digest()
+        assert client.get("/api/procurement/purchase-orders").status_code == 200
+
+        # Cookie-authenticated writes fail closed without the CSRF header.
+        assert client.post("/api/auth/session/rotate").status_code == 403
+        rotated = client.post(
+            "/api/auth/session/rotate",
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert rotated.status_code == 200
+        rotated_token = client.cookies.get("__Host-retail_session")
+        rotated_csrf = client.cookies.get("__Host-retail_csrf")
+        assert rotated_token and rotated_csrf and rotated_token != old_token
+
+        with psycopg.connect(DATABASE_URL) as conn:
+            old_session_id, old_revoked = conn.execute(
+                "SELECT id, revoked_at IS NOT NULL FROM auth_sessions WHERE refresh_token_hash = %s",
+                (old_hash,),
+            ).fetchone()
+            rotated_hash = hashlib.sha256(rotated_token.encode()).digest()
+            new_session_id, parent_id, rotated_csrf_hash = conn.execute(
+                """
+                SELECT id, rotated_from_session_id, csrf_token_hash
+                FROM auth_sessions WHERE refresh_token_hash = %s
+                """,
+                (rotated_hash,),
+            ).fetchone()
+        assert old_revoked is True
+        assert parent_id == old_session_id
+        assert rotated_csrf_hash == hashlib.sha256(rotated_csrf.encode()).digest()
+        assert client.get("/api/procurement/purchase-orders").status_code == 200
+
+        logged_out = client.post(
+            "/api/auth/logout",
+            headers={"X-CSRF-Token": rotated_csrf},
+        )
+        assert logged_out.status_code == 200
+        with psycopg.connect(DATABASE_URL) as conn:
+            assert conn.execute(
+                "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE id = %s",
+                (new_session_id,),
+            ).fetchone()[0] is True
+        assert client.get("/api/procurement/purchase-orders").status_code == 401
+
+
