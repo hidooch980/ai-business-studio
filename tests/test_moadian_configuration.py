@@ -85,3 +85,14 @@ def test_moadian_routes_are_registered() -> None:
     paths = create_app().openapi()["paths"]
     assert "/api/v1/tax/moadian/connections" in paths
     assert "/api/v1/tax/moadian/connections/{connection_id}/disable" in paths
+
+
+def test_moadian_secret_fields_reject_raw_private_key_material() -> None:
+    with pytest.raises(ValidationError):
+        MoadianConnectionRequest(
+            tax_memory_uid="MEMORY_12345",
+            taxpayer_identifier="12345678901",
+            submission_mode="direct",
+            private_key_secret_ref="-----BEGIN PRIVATE KEY-----raw-key-material",
+            certificate_secret_ref="secret://tenant-a/moadian/certificate",
+        )
