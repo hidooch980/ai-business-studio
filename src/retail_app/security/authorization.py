@@ -68,7 +68,6 @@ _ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.INVENTORY_READ,
             Permission.PURCHASE_REQUEST_CREATE,
             Permission.SUPPLIER_READ,
-            Permission.SUPPLIER_WRITE,
             Permission.PURCHASE_ORDER_CREATE,
             Permission.PURCHASE_ORDER_READ,
             Permission.CASH_SHIFT_OPERATE,
