@@ -367,6 +367,28 @@ def record_supplier_payment(
     ).with_for_update())
     if invoice is None:
         raise HTTPException(status_code=404, detail="Supplier invoice not found")
+
+    # A concurrent request may have committed the same idempotency key while
+    # this request waited for the invoice row lock. Re-check after locking so
+    # an identical retry replays instead of being rejected as overpayment.
+    raced_existing = db.scalar(select(SupplierPayment).where(
+        SupplierPayment.tenant_id == principal.tenant.id,
+        SupplierPayment.idempotency_key == key,
+    ))
+    if raced_existing is not None:
+        if raced_existing.request_hash != digest:
+            raise HTTPException(status_code=409, detail="Idempotency-Key was used for another payment")
+        journal = db.scalar(select(JournalEntry).where(
+            JournalEntry.tenant_id == principal.tenant.id,
+            JournalEntry.idempotency_key == f"supplier-payment:{raced_existing.id}",
+        ))
+        return {
+            "payment_id": str(raced_existing.id),
+            "invoice_id": str(raced_existing.supplier_invoice_id),
+            "journal_entry_id": str(journal.id) if journal else None,
+            "replayed": True,
+        }
+
     if invoice.status not in {"posted", "partially_paid"}:
         raise HTTPException(status_code=409, detail="Invoice must be posted to accounts payable before payment")
     accounting = db.scalar(select(ProcurementAccountingSettings).where(
