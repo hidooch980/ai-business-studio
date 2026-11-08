@@ -3,12 +3,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, StringConstraints, model_validator
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
 from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_permission
-from backend.app.identity.models import AuditEvent, FinancialAccount
+from backend.app.identity.models import AuditEvent, FinancialAccount, JournalEntry
 from backend.app.procurement.models import ProcurementAccountingSettings
 
 router = APIRouter(prefix="/procurement/accounting-settings", tags=["purchase-accounting"])
@@ -107,6 +107,40 @@ def upsert_procurement_accounting_settings(
         "updated_by_user_id": principal.user.id,
         "updated_at": now,
     }
+    if item is not None:
+        requested = {
+            "inventory_account_code": payload.inventory_account_code.upper(),
+            "grni_account_code": payload.grni_account_code.upper(),
+            "ap_account_code": payload.ap_account_code.upper(),
+            "cash_account_code": payload.cash_account_code.upper(),
+            "base_currency": payload.base_currency.upper(),
+        }
+        current = {
+            "inventory_account_code": item.inventory_account_code,
+            "grni_account_code": item.grni_account_code,
+            "ap_account_code": item.ap_account_code,
+            "cash_account_code": item.cash_account_code,
+            "base_currency": item.base_currency,
+        }
+        if requested != current:
+            has_procurement_postings = db.scalar(
+                select(JournalEntry.id)
+                .where(
+                    JournalEntry.tenant_id == principal.tenant.id,
+                    or_(
+                        JournalEntry.idempotency_key.like("procurement-receipt:%"),
+                        JournalEntry.idempotency_key.like("procurement-invoice:%"),
+                        JournalEntry.idempotency_key.like("supplier-payment:%"),
+                    ),
+                )
+                .limit(1)
+            )
+            if has_procurement_postings is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Procurement account mappings are locked after the first ledger posting",
+                )
+
     if item is None:
         item = ProcurementAccountingSettings(
             tenant_id=principal.tenant.id,
