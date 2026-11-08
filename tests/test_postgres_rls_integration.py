@@ -1340,3 +1340,120 @@ def test_34_rejected_receipt_quantity_can_be_replaced_without_false_overdelivery
     assert get_stock_balance(
         database, actor, branch_id=str(BRANCH_A), item_id=item_id
     )["on_hand_quantity_milli"] == 10000
+
+
+def test_35_postgres_session_inventory_and_selected_revocation_are_subject_scoped():
+    from fastapi import HTTPException
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionService
+
+    database = PostgresDatabase(RUNTIME_URL)
+    service = SessionService(database)
+    current = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    selected = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    other_user = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A2))
+    try:
+        context = _resolve_live(current.refresh_token)
+        sessions = service.list_sessions(
+            tenant_id=context.tenant_id,
+            subject_id=context.subject_id,
+            current_session_id=context.session_id,
+            session_token_hash=context.session_token_hash,
+            expected_role=context.role.value,
+            expected_branch_ids=context.branch_ids,
+        )
+        session_ids = {item["id"] for item in sessions}
+        assert current.session_id in session_ids
+        assert selected.session_id in session_ids
+        assert other_user.session_id not in session_ids
+
+        assert service.revoke_session(
+            tenant_id=context.tenant_id,
+            subject_id=context.subject_id,
+            current_session_id=context.session_id,
+            session_token_hash=context.session_token_hash,
+            expected_role=context.role.value,
+            expected_branch_ids=context.branch_ids,
+            target_session_id=selected.session_id,
+        ) is True
+        with pytest.raises(HTTPException):
+            _resolve_live(selected.refresh_token)
+        assert _resolve_live(current.refresh_token).subject_id == str(USER_A)
+
+        # A tenant peer cannot revoke a different subject's session by ID.
+        assert service.revoke_session(
+            tenant_id=context.tenant_id,
+            subject_id=context.subject_id,
+            current_session_id=context.session_id,
+            session_token_hash=context.session_token_hash,
+            expected_role=context.role.value,
+            expected_branch_ids=context.branch_ids,
+            target_session_id=other_user.session_id,
+        ) is False
+        assert _resolve_live(other_user.refresh_token).subject_id == str(USER_A2)
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "DELETE FROM auth_sessions WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
+            admin.execute(
+                "DELETE FROM auth_sessions WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A2),
+            )
+
+
+def test_36_postgres_session_management_http_routes_enforce_origin_and_revoke_selected_session():
+    import asyncio
+
+    import httpx
+    from fastapi import HTTPException
+
+    from retail_app.api.app import create_app
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionService
+
+    database = PostgresDatabase(RUNTIME_URL)
+    service = SessionService(database)
+    current = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    selected = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    app = create_app(database)
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="https://testserver",
+        ) as client:
+            cookie = {"Cookie": f"__Host-retail_session={current.refresh_token}"}
+            inventory = await client.get("/api/v1/auth/sessions", headers=cookie)
+            assert inventory.status_code == 200, inventory.text
+            assert selected.session_id in {item["id"] for item in inventory.json()}
+
+            denied = await client.delete(
+                f"/api/v1/auth/sessions/{selected.session_id}",
+                headers=cookie,
+            )
+            assert denied.status_code == 403
+
+            revoked = await client.delete(
+                f"/api/v1/auth/sessions/{selected.session_id}",
+                headers={
+                    **cookie,
+                    "Origin": "https://testserver",
+                    "Sec-Fetch-Site": "same-origin",
+                },
+            )
+            assert revoked.status_code == 204, revoked.text
+
+    try:
+        asyncio.run(exercise())
+        with pytest.raises(HTTPException):
+            _resolve_live(selected.refresh_token)
+        assert _resolve_live(current.refresh_token).subject_id == str(USER_A)
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute(
+                "DELETE FROM auth_sessions WHERE tenant_id = %s AND identity_id = %s",
+                (TENANT_A, USER_A),
+            )
