@@ -1,6 +1,6 @@
-from retail_app.infrastructure.idempotency import request_digest
 from retail_app.infrastructure.audit import record_audit
 from retail_app.infrastructure.events import append_domain_event
+from retail_app.infrastructure.idempotency import request_digest
 
 
 def test_idempotency_digest_is_canonical_across_mapping_order():
@@ -9,6 +9,7 @@ def test_idempotency_digest_is_canonical_across_mapping_order():
 
 def test_idempotency_digest_rejects_non_json_numbers():
     import pytest
+
     with pytest.raises(ValueError):
         request_digest({"amount": float("nan")})
 
@@ -23,6 +24,7 @@ class RecordingConnection:
 
 def test_audit_writer_uses_callers_transaction_and_validates_outcome():
     import pytest
+
     connection = RecordingConnection()
     event_id = record_audit(
         connection, tenant_id="tenant", actor_identity_id=None,
