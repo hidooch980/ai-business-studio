@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Callable
-from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import HTTPException, Request
@@ -27,13 +25,11 @@ class SessionResolver:
         database: PostgresDatabase,
         *,
         cookie_name: str = "__Host-retail_session",
-        clock: Callable[[], datetime] | None = None,
     ) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_\-]{1,80}", cookie_name):
             raise ValueError("invalid session cookie name")
         self._database = database
         self._cookie_name = cookie_name
-        self._clock = clock or (lambda: datetime.now(UTC))
 
     def __call__(self, request: Request) -> AccessContext:
         token = request.cookies.get(self._cookie_name)
@@ -43,7 +39,7 @@ class SessionResolver:
         token_hash = hashlib.sha256(token.encode("utf-8")).digest()
         with self._database.transaction() as connection:
             row = connection.execute(
-                "SELECT session_id, tenant_id, identity_id, expires_at, revoked_at "
+                "SELECT session_id, tenant_id, identity_id "
                 "FROM public.resolve_auth_session(%s)",
                 (token_hash,),
             ).fetchone()
@@ -51,12 +47,7 @@ class SessionResolver:
         if row is None:
             raise HTTPException(status_code=401, detail="authentication required")
 
-        _, tenant_id, identity_id, expires_at, revoked_at = row
-        now = self._clock()
-        if now.tzinfo is None:
-            raise ValueError("resolver clock must return a timezone-aware datetime")
-        if revoked_at is not None or expires_at <= now:
-            raise HTTPException(status_code=401, detail="authentication required")
+        _, tenant_id, identity_id = row
 
         membership_denied = False
         branch_ids: frozenset[str] = frozenset()
