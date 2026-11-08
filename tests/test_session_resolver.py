@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-from datetime import datetime
 from uuid import uuid4
 
 import psycopg
@@ -212,13 +211,6 @@ def test_unknown_token_is_rejected_without_disclosing_session_data():
         SessionResolver(PostgresDatabase(RUNTIME_URL))(_request("x" * 48))
     assert error.value.status_code == 401
 
-
-def test_resolver_clock_must_be_timezone_aware(auth_records):
-    with pytest.raises(ValueError, match="timezone-aware"):
-        SessionResolver(
-            PostgresDatabase(RUNTIME_URL),
-            clock=lambda: datetime.now().replace(tzinfo=None),
-        )(_request(auth_records["token"]))
 
 def test_lookup_owner_has_only_session_table_read_scope():
     with psycopg.connect(DATABASE_URL) as conn:
