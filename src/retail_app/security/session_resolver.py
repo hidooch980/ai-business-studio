@@ -40,15 +40,15 @@ class SessionResolver:
         token_hash = hashlib.sha256(token.encode("utf-8")).digest()
         with self._database.transaction() as connection:
             row = connection.execute(
-                "SELECT session_id, tenant_id, identity_id "
-                "FROM public.resolve_auth_session(%s)",
+                "SELECT session_id, tenant_id, identity_id, csrf_token_hash "
+                "FROM public.resolve_auth_session_with_csrf(%s)",
                 (token_hash,),
             ).fetchone()
 
         if row is None:
             raise HTTPException(status_code=401, detail="authentication required")
 
-        session_id, tenant_id, identity_id = row
+        session_id, tenant_id, identity_id, csrf_token_hash = row
         request.state.session_id = str(session_id)
 
         membership_denied = False
@@ -60,22 +60,13 @@ class SessionResolver:
             if request.method.upper() not in {"GET", "HEAD", "OPTIONS", "TRACE"}:
                 csrf_cookie = request.cookies.get("__Host-retail_csrf", "")
                 csrf_header = request.headers.get("X-CSRF-Token", "")
-                csrf_row = connection.execute(
-                    """
-                    SELECT csrf_token_hash FROM public.auth_sessions
-                    WHERE id = %s AND tenant_id = %s AND identity_id = %s
-                      AND revoked_at IS NULL AND expires_at > clock_timestamp()
-                    """,
-                    (session_id, tenant_id, identity_id),
-                ).fetchone()
                 supplied_hash = hashlib.sha256(csrf_header.encode("utf-8")).digest()
                 if (
                     not csrf_cookie
                     or not csrf_header
                     or not hmac.compare_digest(csrf_cookie, csrf_header)
-                    or csrf_row is None
-                    or csrf_row[0] is None
-                    or not hmac.compare_digest(bytes(csrf_row[0]), supplied_hash)
+                    or csrf_token_hash is None
+                    or not hmac.compare_digest(bytes(csrf_token_hash), supplied_hash)
                 ):
                     raise HTTPException(status_code=403, detail="CSRF validation failed")
 
