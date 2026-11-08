@@ -1,6 +1,6 @@
 """Add smart procurement permission codes.
 
-Revision ID: 0014_smart_procurement_permissions
+Revision ID: 0014_procurement_perms
 Revises: 0013_login_rate_limit_retention
 """
 from uuid import uuid4
