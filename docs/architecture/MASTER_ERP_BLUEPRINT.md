@@ -52,6 +52,7 @@ Primary outcomes:
 - Partial receipts, quality inspection, rejected/returned goods, landed costs, and supplier invoices.
 - Three-way match: purchase order ↔ goods receipt ↔ supplier invoice; tolerance and exception queues.
 - Supplier balances, debit/credit notes, payment runs, performance scorecards, and contract renewals.
+- **Demand-driven smart procurement:** forecast sales by SKU/branch, calculate inventory position and safety stock, detect fast movers and stockout risk, suggest reorder quantities and timing, compare supplier landed cost/reliability, and prepare approval-gated draft purchase requests. See [SMART_PROCUREMENT.md](SMART_PROCUREMENT.md). This is approved target scope, not implemented functionality.
 
 ### 3.2 Inventory and warehouse execution
 - Multiple companies, sites, warehouses, zones, bins, and stock ownership/status.
@@ -178,7 +179,8 @@ Primary outcomes:
 
 ### Phase B — Inventory and procure-to-pay
 - Units/conversions, categories, lots/serial/expiry, locations/bins, reservations, transfers, valuation, purchase orders, receipts, supplier invoices, three-way match.
-- Gate: concurrency, traceability, valuation-to-GL reconciliation, duplicate/replay and partial receipt tests.
+- Add demand-driven replenishment in stages: deterministic inventory position/reorder/safety-stock first; then forecast-based fast-mover and stockout prioritization; supplier comparison and branch transfers; finally approval-gated scheduled draft requests.
+- Gate: concurrency, traceability, valuation-to-GL reconciliation, duplicate/replay and partial receipt tests; demand forecast backtesting and stale-data safeguards.
 
 ### Phase C — Sales, POS, and order-to-cash
 - Customer/CRM, quotes/orders, POS cash-first vertical slice, register shifts, payment adapter contracts, split tender, refunds, returns, offline draft synchronization.
