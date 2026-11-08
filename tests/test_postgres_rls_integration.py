@@ -1140,7 +1140,7 @@ def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
         headers=headers,
         cookies={"__Host-retail_session": issued.refresh_token},
     )
-    assert refreshed.status_code == 204
+    assert refreshed.status_code == 204, refreshed.text
     set_cookie = refreshed.headers.get("set-cookie", "").lower()
     assert "secure" in set_cookie and "httponly" in set_cookie and "samesite=strict" in set_cookie
     rotated_token = client.cookies.get("__Host-retail_session")
