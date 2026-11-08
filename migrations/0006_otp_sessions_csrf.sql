@@ -1,5 +1,7 @@
 BEGIN;
 
+GRANT CREATE ON SCHEMA public TO auth_session_lookup_owner;
+
 -- CSRF tokens are bound to the server-side session and never accepted from
 -- request payloads. Existing sessions without a hash cannot perform writes.
 ALTER TABLE public.auth_sessions
@@ -234,5 +236,7 @@ BEGIN
     END IF;
 END
 $resolver_grant$;
+
+REVOKE CREATE ON SCHEMA public FROM auth_session_lookup_owner;
 
 COMMIT;
