@@ -1,6 +1,6 @@
 # Smart Procurement & Demand-Driven Replenishment
 
-Status: **Approved target scope / not implemented yet**
+Status: **Approved target scope / partially implemented preview; not production-ready**
 
 ## 1. Objective
 
@@ -103,3 +103,9 @@ A production-ready implementation must include:
 - **SP-6 Controlled automation:** scheduled draft generation and notifications; any commitment remains behind human approval.
 
 Each stage requires code, migrations, API/UI, audit and idempotency, negative authorization and concurrency tests, CI on the exact commit, and staging acceptance. This document is scope definition only and does not indicate implementation completion.
+
+## Current implementation status (2026-11-08)
+
+A first executable preview increment is present on branch `feat/smart-procurement-engine` (PR #11): deterministic demand baseline, censored stockout/promotion exclusion, safety-stock and reorder-point calculation, inventory-position arithmetic, MOQ/order-multiple handling, budget/storage/shelf-life/supplier-capacity constraints, supplier quote ranking, safe transfer suggestions, and a permission-gated preview API. Unit and API integration tests have been added.
+
+This is **not** the complete module. The preview currently accepts demand, stock, supplier and source-branch facts from the caller; it does not yet load these from persistent tenant data or persist recommendations. Supplier/product master data, sales/POS event ingestion, real reservations and inbound purchase commitments, PO/RFQ workflow, approvals, receipts, invoice matching, accounting/valuation reconciliation, scheduled jobs, dashboards, and UI remain unimplemented. No CI run is currently visible for the PR head, so the integration tests and migration have not yet been verified in the repository's CI environment. Keep the PR in draft and do not merge or use this as production purchasing automation.
