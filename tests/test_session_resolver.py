@@ -225,7 +225,27 @@ def test_lookup_owner_has_only_session_table_read_scope():
                 has_column_privilege('auth_session_lookup_owner', 'public.auth_sessions', 'refresh_token_hash', 'SELECT'),
                 has_table_privilege('auth_session_lookup_owner', 'public.identities', 'SELECT'),
                 has_table_privilege('auth_session_lookup_owner', 'public.tenants', 'SELECT'),
+                has_table_privilege('auth_session_lookup_owner', 'public.auth_session_lookup_audit', 'INSERT'),
                 pg_has_role('retail_session_runtime', 'auth_session_lookup_owner', 'MEMBER')
             """
         ).fetchone()
-    assert privileges == (True, False, False, False)
+    assert privileges == (True, False, False, True, False)
+
+def test_session_lookup_audit_records_outcome_without_token_hash(auth_records):
+    SessionResolver(PostgresDatabase(RUNTIME_URL))(_request(auth_records["token"]))
+    with psycopg.connect(DATABASE_URL) as conn:
+        event = conn.execute(
+            """
+            SELECT session_id, outcome
+            FROM auth_session_lookup_audit
+            WHERE session_id = %s
+            ORDER BY occurred_at DESC
+            LIMIT 1
+            """,
+            (auth_records["session_id"],),
+        ).fetchone()
+    assert event == (auth_records["session_id"], "matched")
+
+    with psycopg.connect(RUNTIME_URL) as conn:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+            conn.execute("SELECT * FROM auth_session_lookup_audit").fetchall()
