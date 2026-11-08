@@ -46,3 +46,9 @@ def test_employee_cannot_grant_itself_owner_permission():
     actor = AccessContext("staff-1", "tenant-1", Role.EMPLOYEE, frozenset({"branch-a"}))
     with pytest.raises(AccessDenied):
         authorize(actor, Permission.BUSINESS_OVERVIEW_READ, ResourceScope("tenant-1", "branch-a"))
+
+
+def test_unknown_or_forged_role_fails_closed_without_server_error():
+    actor = AccessContext("staff-1", "tenant-1", "owner_admin")  # type: ignore[arg-type]
+    with pytest.raises(AccessDenied, match="unsupported identity role"):
+        authorize(actor, Permission.BUSINESS_OVERVIEW_READ, ResourceScope("tenant-1"))
