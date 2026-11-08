@@ -112,12 +112,12 @@ class OTPReceipt:
 def normalize_identifier(identifier: str, channel: OTPChannel) -> str:
     value = identifier.strip()
     if channel is OTPChannel.SMS:
-        normalized = re.sub(r"[\s().-]", "", value)
-        if not re.fullmatch(r"\+[1-9][0-9]{7,14}", normalized):
+        normalized = re.sub(r"[\\s().-]", "", value)
+        if not re.fullmatch(r"\\+[1-9][0-9]{7,14}", normalized):
             raise ValueError("phone number must be in E.164 format")
         return normalized
     normalized = value.lower()
-    if len(normalized) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+    if len(normalized) > 254 or not re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", normalized):
         raise ValueError("invalid email address")
     return normalized
 
@@ -202,7 +202,7 @@ class OTPService:
         rate_limit_keys: tuple[str, ...],
         now: datetime | None = None,
     ) -> None:
-        at = now or datetime.now(timezone.utc)
+        at = now or datetime.now(UTC)
         if at.tzinfo is None:
             raise ValueError("now must be timezone-aware")
         if not rate_limit_keys or not self._rate_limiter.allow(
