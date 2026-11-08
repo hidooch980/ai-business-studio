@@ -1216,3 +1216,17 @@ def test_31_security_audit_events_are_append_only():
             )
         with pytest.raises(psycopg.Error):
             admin.execute("DELETE FROM security_audit_events WHERE id = %s", (event_id,))
+
+def test_32_security_audit_reads_are_restricted_to_tenant_owner_admin(runtime):
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A2)
+        assert runtime.execute(
+            "SELECT count(*) FROM security_audit_events WHERE tenant_id = %s",
+            (TENANT_A,),
+        ).fetchone()[0] == 0
+    with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
+        assert runtime.execute(
+            "SELECT count(*) FROM security_audit_events WHERE tenant_id = %s",
+            (TENANT_A,),
+        ).fetchone()[0] >= 1
