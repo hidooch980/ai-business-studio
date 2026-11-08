@@ -412,6 +412,13 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
     )
     assert posted.status_code == 200, posted.text
     assert posted.json()["status"] == "posted"
+    posted_replay = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/post",
+        headers=headers,
+    )
+    assert posted_replay.status_code == 200, posted_replay.text
+    assert posted_replay.json()["replayed"] is True
+    assert posted_replay.json()["journal_entry_id"] == posted.json()["journal_entry_id"]
 
     first_payment_payload = {
         "amount_minor": 1000,
@@ -436,6 +443,7 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
     )
     assert replay.status_code == 201, replay.text
     assert replay.json()["replayed"] is True
+    assert replay.json()["journal_entry_id"] == payment.json()["journal_entry_id"]
 
     final_payment = purchasing_client.post(
         f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
