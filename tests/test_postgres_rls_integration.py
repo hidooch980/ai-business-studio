@@ -740,16 +740,18 @@ def test_15_session_bootstrap_rejects_expired_and_revoked_sessions(runtime):
             "UPDATE auth_sessions SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = %s",
             (SESSION_A,),
         )
-        assert runtime.execute(
+        expired = runtime.execute(
             "SELECT count(*) FROM resolve_auth_session_bootstrap(decode(repeat('01', 32), 'hex'))"
-        ).fetchone()[0] == 0
+        ).fetchone()[0]
+        assert expired == 1  # The resolver checks expiry; the lookup must retain the digest for replay analysis.
         runtime.execute(
             "UPDATE auth_sessions SET expires_at = now() + interval '1 day', revoked_at = now() WHERE id = %s",
             (SESSION_A,),
         )
-        assert runtime.execute(
+        revoked = runtime.execute(
             "SELECT count(*) FROM resolve_auth_session_bootstrap(decode(repeat('01', 32), 'hex'))"
-        ).fetchone()[0] == 0
+        ).fetchone()[0]
+        assert revoked == 1  # Reuse detection must still identify a rotated/revoked token family.
 
 
 def test_16_bootstrap_owner_and_runtime_have_no_bypassrls(runtime):
@@ -1132,10 +1134,12 @@ def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
         tenant_id=str(TENANT_A), subject_id=str(USER_A)
     )
     client = TestClient(create_app(database), base_url="https://testserver")
-    client.cookies.set("__Host-retail_session", issued.refresh_token, secure=True)
+    client.cookies.set("__Host-retail_session", issued.refresh_token, domain="testserver", path="/")
     headers = {"Origin": "https://testserver", "Sec-Fetch-Site": "same-origin"}
     refreshed = client.post("/api/v1/auth/refresh", headers=headers)
     assert refreshed.status_code == 204
+    set_cookie = refreshed.headers.get("set-cookie", "").lower()
+    assert "secure" in set_cookie and "httponly" in set_cookie and "samesite=strict" in set_cookie
     rotated_token = client.cookies.get("__Host-retail_session")
     assert rotated_token and rotated_token != issued.refresh_token
     assert _resolve_live(rotated_token).subject_id == str(USER_A)
