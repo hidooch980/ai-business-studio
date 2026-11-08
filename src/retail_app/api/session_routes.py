@@ -38,12 +38,10 @@ def create_session_router(database: Any) -> APIRouter:
             raise HTTPException(status_code=401, detail="authentication required")
         try:
             issued = service.rotate(token)
-        except RefreshTokenReplayError as exc:
+        except (RefreshTokenReplayError, SessionAuthenticationError):
             response.delete_cookie(COOKIE_NAME, path="/", secure=True, httponly=True, samesite="strict")
-            raise HTTPException(status_code=401, detail="session expired; sign in again") from exc
-        except SessionAuthenticationError as exc:
-            response.delete_cookie(COOKIE_NAME, path="/", secure=True, httponly=True, samesite="strict")
-            raise HTTPException(status_code=401, detail="session expired; sign in again") from exc
+            response.status_code = 401
+            return response
         response.set_cookie(
             COOKIE_NAME,
             issued.refresh_token,
