@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0015_tenant_module_entitlements"
-down_revision = "0014_smart_procurement_permissions"
+down_revision = "0014_procurement_perms"
 branch_labels = None
 depends_on = None
 
