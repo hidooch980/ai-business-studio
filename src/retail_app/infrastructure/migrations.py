@@ -48,8 +48,8 @@ def apply_migrations(database_url: str, migrations_dir: str | Path) -> list[str]
                 # SQL files are also directly executable and therefore carry
                 # BEGIN/COMMIT. Strip those wrappers so the migration and its
                 # ledger entry commit atomically in this runner.
-                sql = re.sub(r"^\\s*BEGIN\\s*;", "", sql, count=1, flags=re.IGNORECASE)
-                sql = re.sub(r"\\s*COMMIT\\s*;\\s*$", "", sql, count=1, flags=re.IGNORECASE)
+                sql = re.sub(r"^\s*BEGIN\s*;", "", sql, count=1, flags=re.IGNORECASE)
+                sql = re.sub(r"\s*COMMIT\s*;\s*$", "", sql, count=1, flags=re.IGNORECASE)
                 with connection.transaction():
                     connection.execute(sql, prepare=False)
                     connection.execute(
