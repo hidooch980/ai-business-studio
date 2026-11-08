@@ -8,7 +8,7 @@ from uuid import uuid4
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0014_smart_procurement_permissions"
+revision = "0014_procurement_perms"
 down_revision = "0013_login_rate_limit_retention"
 branch_labels = None
 depends_on = None
