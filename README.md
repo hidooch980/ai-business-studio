@@ -33,6 +33,7 @@ Manufacturing, industrial maintenance, fleet management, project management and 
 - [Approved retail product scope](docs/RETAIL_PRODUCT_SCOPE.md)
 - [Loyalty and manager/employee/customer applications](docs/LOYALTY_AND_APPS_SPEC.md)
 - [OTP authentication and session security](docs/AUTH_OTP_SECURITY_SPEC.md)
+- [OTP service core implementation and production adapter requirements](docs/OTP_SERVICE_IMPLEMENTATION.md)
 - [Backend authorization core and integration contract](docs/BACKEND_AUTHORIZATION_CORE.md)
 - [PostgreSQL identity and security schema](docs/POSTGRES_IDENTITY_SECURITY_SCHEMA.md)
 - [AI Decision Engine specification](docs/AI_DECISION_ENGINE_SPEC.md)
