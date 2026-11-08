@@ -725,3 +725,68 @@ def test_17_otp_challenge_is_rate_limited_and_consumed_atomically(runtime):
             "SELECT public.consume_auth_otp(%s, %s, %s)",
             (challenge_id, fingerprint, valid_code_hmac),
         ).fetchone()[0] is None
+
+
+def test_18_complete_otp_login_session_rotation_and_logout():
+    import hashlib
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.auth_service import AuthService, OTPDelivery
+    from retail_app.security.authorization import AccessContext, Role
+
+    class CapturingDelivery(OTPDelivery):
+        code = None
+
+        def send(self, *, channel: str, destination: str, code: str) -> None:
+            assert channel == "sms"
+            assert destination == "+12025550101"
+            self.code = code
+
+    delivery = CapturingDelivery()
+    service = AuthService(
+        PostgresDatabase(RUNTIME_URL),
+        otp_hmac_secret=b"test-otp-hmac-secret-material-32-bytes",
+        otp_delivery=delivery,
+    )
+    identifier = "+12025550101"
+    challenge_id = service.request_otp(identifier)
+    assert delivery.code is not None
+    raw_token, csrf_token = service.verify_otp(
+        challenge_id=challenge_id,
+        identifier=identifier,
+        code=delivery.code,
+        tenant_id=str(TENANT_A),
+    )
+    old_hash = hashlib.sha256(raw_token.encode()).digest()
+    with psycopg.connect(DATABASE_URL) as conn:
+        old_session_id = conn.execute(
+            "SELECT id FROM auth_sessions WHERE refresh_token_hash = %s",
+            (old_hash,),
+        ).fetchone()[0]
+
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    rotated_token, rotated_csrf = service.rotate_session(actor, str(old_session_id))
+    rotated_hash = hashlib.sha256(rotated_token.encode()).digest()
+    with psycopg.connect(DATABASE_URL) as conn:
+        old_revoked = conn.execute(
+            "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE id = %s",
+            (old_session_id,),
+        ).fetchone()[0]
+        new_session_id = conn.execute(
+            "SELECT id FROM auth_sessions WHERE refresh_token_hash = %s",
+            (rotated_hash,),
+        ).fetchone()[0]
+        parent_id = conn.execute(
+            "SELECT rotated_from_session_id FROM auth_sessions WHERE id = %s",
+            (new_session_id,),
+        ).fetchone()[0]
+    assert old_revoked is True
+    assert parent_id == old_session_id
+
+    service.revoke_session(actor, str(new_session_id))
+    with psycopg.connect(DATABASE_URL) as conn:
+        assert conn.execute(
+            "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE id = %s",
+            (new_session_id,),
+        ).fetchone()[0] is True
