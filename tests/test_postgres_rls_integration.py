@@ -1264,7 +1264,10 @@ def test_33_expired_refresh_token_is_denied_and_audited_using_database_time():
     issued = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
     with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
         admin.execute(
-            "UPDATE auth_sessions SET expires_at = clock_timestamp() - interval '1 second' WHERE id = %s",
+            "UPDATE auth_sessions
+               SET created_at = clock_timestamp() - interval '2 seconds',
+                   expires_at = clock_timestamp() - interval '1 second'
+               WHERE id = %s",
             (issued.session_id,),
         )
     with pytest.raises(SessionAuthenticationError):
@@ -1286,7 +1289,7 @@ def test_34_rejected_receipt_quantity_can_be_replaced_without_false_overdelivery
     from uuid import uuid4
 
     from retail_app.infrastructure.database import PostgresDatabase
-    from retail_app.procurement.chain import get_stock_balance, receive_goods
+    from retail_app.procurement.chain import approve_purchase_order, get_stock_balance, receive_goods
     from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
     from retail_app.procurement.service import create_purchase_order, create_supplier
     from retail_app.procurement.suppliers import Supplier
@@ -1310,6 +1313,7 @@ def test_34_rejected_receipt_quantity_can_be_replaced_without_false_overdelivery
         ),
         idempotency_key="replacement-po-create-0001",
     )
+    approve_purchase_order(database, actor, order_id, idempotency_key="replacement-po-approve-0001")
     first = receive_goods(
         database, actor, order_id, receipt_number="GR-REPLACEMENT-0001",
         received_at=datetime(2026, 11, 8, tzinfo=UTC),
