@@ -90,6 +90,7 @@ def preview_replenishment(
         confirmed_inbound=payload.confirmed_inbound,
         backordered_units=payload.backordered_units,
         lead_time_days=chosen.lead_time_days if chosen else payload.lead_time_days,
+        lead_time_std_days=chosen.lead_time_std_days if chosen else Decimal("0"),
         review_period_days=payload.review_period_days,
         service_level=payload.service_level,
         minimum_order_quantity=payload.minimum_order_quantity,
