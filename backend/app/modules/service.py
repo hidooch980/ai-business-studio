@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from backend.app.identity.models import TenantModuleEntitlement, TenantSubscription
-from backend.app.modules.registry import Edition, MODULES, ModuleStatus, resolve_edition
+from backend.app.modules.registry import MODULES, Edition, ModuleStatus, resolve_edition
 
 
 def provision_tenant_modules(
