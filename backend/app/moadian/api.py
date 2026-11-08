@@ -15,7 +15,7 @@ from backend.app.moadian.models import MoadianConnection
 router = APIRouter(prefix="/tax/moadian", tags=["moadian-tax"])
 MemoryUid = Annotated[str, StringConstraints(strip_whitespace=True, min_length=6, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")]
 TaxpayerIdentifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
-SecretReference = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=200)]
+SecretReference = Annotated[str, StringConstraints(strip_whitespace=True, min_length=10, max_length=200, pattern=r"^secret://[A-Za-z0-9._/-]+$")]
 ProviderCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]+$")]
 
 
