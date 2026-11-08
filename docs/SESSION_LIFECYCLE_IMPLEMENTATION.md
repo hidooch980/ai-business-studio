@@ -10,6 +10,8 @@
 - `POST /api/v1/auth/logout` revokes the current cookie session and clears the cookie.
 - Refresh/logout require a matching Origin and reject cross-site Fetch Metadata.
 - Migration `0006_refresh_token_families.sql` adds family tracking and preserves existing sessions by assigning each a family ID.
+- Migration `0007_security_audit_immutability.sql` makes session security audit records append-only and restricts reads to tenant owner/admin identities.
+- Session issue, successful rotation, replay, expiry/authorization denial, current-session logout and logout-all operations write security audit events in the same database transaction.
 - PostgreSQL integration tests cover issuance, rotation, replay, concurrent refresh, logout and membership revocation.
 
 ## Authentication entrypoint deliberately not exposed yet
@@ -25,7 +27,7 @@ The approved product security design specifies phone/email OTP as the primary si
 
 ## Remaining acceptance gates
 1. Implement OTP verification and only then expose login/session issuance over HTTP.
-2. Add logout-all and session inventory/revocation UI if required by product policy.
+2. Add logout-all HTTP route and session inventory/revocation UI; the internal revoke-all service primitive exists.
 3. Run PostgreSQL 16 CI and verify all concurrency tests pass.
 4. Deploy to a disposable staging environment and perform browser-level refresh/logout and service-worker update tests.
 5. Conduct independent security review before production activation.
