@@ -962,14 +962,13 @@ def test_22_real_postgres_resolver_denies_inactive_branch_even_with_active_membe
         context = _resolve_live(token)
         assert context.role.value == "branch_manager"
         assert str(BRANCH_A) not in context.branch_ids
-        with pytest.raises(PermissionError, match="branch membership changed"):
-            with database.tenant_transaction(
-                tenant_id=context.tenant_id,
-                subject_id=context.subject_id,
-                expected_role=context.role.value,
-                expected_branch_ids=frozenset({str(BRANCH_A)}),
-            ):
-                pass
+        with pytest.raises(PermissionError, match="branch membership changed"), database.tenant_transaction(
+            tenant_id=context.tenant_id,
+            subject_id=context.subject_id,
+            expected_role=context.role.value,
+            expected_branch_ids=frozenset({str(BRANCH_A)}),
+        ):
+            pass
     finally:
         with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
             admin.execute("UPDATE branches SET status = 'active' WHERE id = %s", (BRANCH_A,))
