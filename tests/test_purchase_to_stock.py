@@ -3,14 +3,13 @@ import subprocess
 import sys
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
-from uuid import uuid4
 
 from backend.app.core.config import get_settings
 from backend.app.db.session import build_engine, get_db_session
