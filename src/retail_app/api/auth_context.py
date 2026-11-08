@@ -7,8 +7,8 @@ used to construct AccessContext.
 """
 from __future__ import annotations
 
-import inspect
 from collections.abc import Awaitable, Callable
+import inspect
 from typing import cast
 
 from fastapi import FastAPI, HTTPException, Request
