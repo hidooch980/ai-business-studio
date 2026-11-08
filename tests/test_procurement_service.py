@@ -37,7 +37,7 @@ class FakeDatabase:
         self.entered = False
 
     @contextmanager
-    def tenant_transaction(self, *, tenant_id, subject_id=None, expected_role=None, expected_branch_ids=None):
+    def tenant_transaction(self, *, tenant_id, subject_id=None, expected_role=None, expected_branch_ids=None, session_id=None, session_token_hash=None):
         self.entered = True
         self.context = (tenant_id, subject_id)
         yield self.connection
