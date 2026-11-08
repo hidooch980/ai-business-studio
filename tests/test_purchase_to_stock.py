@@ -465,8 +465,8 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         assert len(payments) == 2
         journals = db.scalars(select(JournalEntry).where(JournalEntry.tenant_id == UUID(tenant_id))).all()
         assert len(journals) == 4
-        assert sum(item.debit_total_minor for item in journals) == 7_500
-        assert sum(item.credit_total_minor for item in journals) == 7_500
+        assert sum(item.debit_total_minor for item in journals) == 11_250
+        assert sum(item.credit_total_minor for item in journals) == 11_250
         payable_debits = db.scalars(select(JournalLine).where(
             JournalLine.tenant_id == UUID(tenant_id),
             JournalLine.account_code == "2100",
@@ -587,3 +587,120 @@ def test_postgres_rejects_concurrent_over_receipt(
     balances = client.get("/api/v1/inventory/balances", headers=headers)
     assert balances.status_code == 200, balances.text
     assert balances.json()["items"][0]["quantity_on_hand"] == 4
+
+
+
+def test_postgres_prevents_concurrent_supplier_overpayment(
+    postgres_purchasing_client: TestClient,
+) -> None:
+    client = postgres_purchasing_client
+    tenant_id, headers = _register_growth(client, "-payment-race")
+    supplier = client.post(
+        "/api/v1/procurement/suppliers",
+        json={"code": "PAY-RACE", "name": "Payment Race Supplier"},
+        headers=headers,
+    )
+    product = client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "PAY-RACE-001", "name": "Payment Race Item", "unit_code": "pcs"},
+        headers=headers,
+    )
+    warehouse = client.post(
+        "/api/v1/inventory/warehouses",
+        json={"code": "PAY-RACE-WH", "name": "Payment Race Warehouse"},
+        headers=headers,
+    )
+    assert supplier.status_code == product.status_code == warehouse.status_code == 201
+    order = client.post(
+        "/api/v1/procurement/purchase-orders",
+        json={
+            "supplier_id": supplier.json()["id"],
+            "warehouse_id": warehouse.json()["id"],
+            "lines": [{"product_id": product.json()["id"], "quantity": 1, "unit_cost_minor": 1000}],
+        },
+        headers=headers,
+    )
+    assert order.status_code == 201, order.text
+    order_id = order.json()["id"]
+    line_id = order.json()["lines"][0]["id"]
+    approved_order = client.post(
+        f"/api/v1/procurement/purchase-orders/{order_id}/approve",
+        headers=headers,
+    )
+    assert approved_order.status_code == 200, approved_order.text
+    receipt = client.post(
+        f"/api/v1/procurement/purchase-orders/{order_id}/receipts",
+        json={"lines": [{"purchase_order_line_id": line_id, "quantity": 1}]},
+        headers={**headers, "Idempotency-Key": "payment-race-receipt"},
+    )
+    assert receipt.status_code == 201, receipt.text
+    invoice = client.post(
+        "/api/v1/procurement/payables/invoices",
+        json={
+            "supplier_id": supplier.json()["id"],
+            "purchase_order_id": order_id,
+            "invoice_number": "PAY-RACE-INV",
+            "invoice_date": "2026-11-08",
+            "due_date": "2026-12-08",
+            "currency": "USD",
+            "lines": [{"purchase_order_line_id": line_id, "quantity": 1, "unit_cost_minor": 1000}],
+        },
+        headers=headers,
+    )
+    assert invoice.status_code == 201, invoice.text
+    invoice_id = invoice.json()["id"]
+    assert client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/match",
+        headers=headers,
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/approve",
+        headers=headers,
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/post",
+        headers=headers,
+    ).status_code == 200
+
+    def pay(key: str) -> int:
+        response = client.post(
+            f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+            json={
+                "amount_minor": 700,
+                "currency": "USD",
+                "payment_date": "2026-11-08",
+                "payment_reference": key,
+            },
+            headers={**headers, "Idempotency-Key": key},
+        )
+        return response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = sorted(pool.map(pay, ["payment-race-a", "payment-race-b"]))
+    assert results == [201, 409]
+
+    with Session(client.app.state.test_engine) as db:
+        saved_invoice = db.scalar(
+            select(SupplierInvoice).where(
+                SupplierInvoice.tenant_id == UUID(tenant_id),
+                SupplierInvoice.id == UUID(invoice_id),
+            )
+        )
+        payments = db.scalars(
+            select(SupplierPayment).where(
+                SupplierPayment.tenant_id == UUID(tenant_id),
+                SupplierPayment.supplier_invoice_id == UUID(invoice_id),
+            )
+        ).all()
+        journals = db.scalars(
+            select(JournalEntry).where(
+                JournalEntry.tenant_id == UUID(tenant_id),
+                JournalEntry.description.like("Supplier payment %"),
+            )
+        ).all()
+        assert saved_invoice is not None
+        assert saved_invoice.paid_minor == 700
+        assert saved_invoice.status == "partially_paid"
+        assert len(payments) == 1
+        assert len(journals) == 1
+        assert journals[0].debit_total_minor == journals[0].credit_total_minor == 700
