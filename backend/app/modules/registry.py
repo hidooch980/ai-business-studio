@@ -100,7 +100,7 @@ def validate_catalog() -> None:
         raise ValueError("module IDs must be unique")
     if len(EDITION_BY_ID) != len(EDITIONS):
         raise ValueError("edition IDs must be unique")
-    version_pattern = re.compile(r"^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$")
+    version_pattern = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
     for module in MODULES:
         if not version_pattern.fullmatch(module.module_version):
             raise ValueError(f"invalid semantic version for module {module.module_id}")
