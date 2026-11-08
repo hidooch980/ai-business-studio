@@ -22,7 +22,7 @@ CREATE TABLE public.auth_session_lookup_audit (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     session_id uuid,
-    outcome text NOT NULL CHECK (outcome IN ('matched', 'unknown'))
+    outcome text NOT NULL CHECK (outcome IN ('matched', 'unknown', 'expired', 'revoked'))
 );
 ALTER TABLE public.auth_session_lookup_audit ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.auth_session_lookup_audit FORCE ROW LEVEL SECURITY;
@@ -67,13 +67,23 @@ BEGIN
         RETURN;
     END IF;
 
+    IF matched_session.revoked_at IS NOT NULL THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (matched_session.id, 'revoked');
+        RETURN;
+    END IF;
+
+    IF matched_session.expires_at <= clock_timestamp() THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (matched_session.id, 'expired');
+        RETURN;
+    END IF;
+
     INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
     VALUES (matched_session.id, 'matched');
 
     RETURN QUERY
-    SELECT matched_session.id, matched_session.tenant_id,
-           matched_session.identity_id, matched_session.expires_at,
-           matched_session.revoked_at;
+    SELECT matched_session.id, matched_session.tenant_id, matched_session.identity_id;
 END
 $function$;
 
