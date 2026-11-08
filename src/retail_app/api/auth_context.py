@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import cast
 
 from fastapi import FastAPI, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from retail_app.api.procurement import create_procurement_router
 from retail_app.security.authorization import AccessContext
@@ -20,9 +21,12 @@ async def require_authenticated_access_context(request: Request) -> AccessContex
     if not callable(resolver):
         raise HTTPException(status_code=503, detail="authenticated session resolver is not configured")
 
-    resolved = resolver(request)
-    if inspect.isawaitable(resolved):
-        resolved = await cast(Awaitable[AccessContext], resolved)
+    if inspect.iscoroutinefunction(resolver):
+        resolved = await cast(Awaitable[AccessContext], resolver(request))
+    else:
+        resolved = await run_in_threadpool(resolver, request)
+        if inspect.isawaitable(resolved):
+            resolved = await cast(Awaitable[AccessContext], resolved)
 
     if not isinstance(resolved, AccessContext) or not resolved.active:
         raise HTTPException(status_code=401, detail="authentication required")
