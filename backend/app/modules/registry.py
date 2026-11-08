@@ -60,8 +60,14 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ModuleDefinition("integrations", "External integrations and public APIs", "0.1.0", ModuleStatus.PLANNED, ("platform",)),
     ModuleDefinition("multi_company", "Multi-company and consolidation", "0.1.0", ModuleStatus.PLANNED, ("platform", "finance")),
     ModuleDefinition("manufacturing", "Manufacturing and MRP", "0.1.0", ModuleStatus.PLANNED, ("catalog", "inventory", "finance"), True),
-    ModuleDefinition("quality_assets", "Quality, maintenance and fixed assets", "0.1.0", ModuleStatus.PLANNED, ("inventory", "finance"), True),
-    ModuleDefinition("service_logistics", "Service desk, fleet and logistics", "0.1.0", ModuleStatus.PLANNED, ("platform", "inventory"), True),
+    ModuleDefinition(
+        "quality_assets", "Quality, maintenance and fixed assets", "0.1.0",
+        ModuleStatus.PLANNED, ("inventory", "finance"), True,
+    ),
+    ModuleDefinition(
+        "service_logistics", "Service desk, fleet and logistics", "0.1.0",
+        ModuleStatus.PLANNED, ("platform", "inventory"), True,
+    ),
     ModuleDefinition("portals", "Customer and supplier portals", "0.1.0", ModuleStatus.PLANNED, ("platform", "integrations"), True),
 )
 
@@ -78,7 +84,10 @@ EDITIONS: tuple[EditionDefinition, ...] = (
     ),
     EditionDefinition(
         Edition.BUSINESS, "Business",
-        ("platform", "catalog", "inventory", "finance", "reports", "procurement", "sales", "pos", "crm", "workflows", "treasury", "hr_payroll", "analytics_ai"),
+        (
+            "platform", "catalog", "inventory", "finance", "reports", "procurement",
+            "sales", "pos", "crm", "workflows", "treasury", "hr_payroll", "analytics_ai",
+        ),
         "Broader operational control, workforce and decision support.",
     ),
     EditionDefinition(
@@ -186,7 +195,10 @@ def resolve_edition(edition: Edition | str, addons: tuple[str, ...] = ()) -> dic
         "edition": selected_edition.value,
         "edition_name": definition.name,
         "modules": modules,
-        "notice": "Catalog metadata is not an authorization grant. Enforce persisted tenant entitlements, feature flags and RBAC on every server-side operation.",
+        "notice": (
+            "Catalog metadata is not an authorization grant. Enforce persisted tenant entitlements,
+            "feature flags and RBAC on every server-side operation.",
+        ),
     }
 
 
