@@ -1,8 +1,8 @@
 import os
 import subprocess
 import sys
-from datetime import date
 from collections.abc import Generator
+from datetime import date
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID, uuid4
 
@@ -588,7 +588,7 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         assert db.scalar(
             select(JournalEntry.id).where(
                 JournalEntry.tenant_id == UUID(tenant_id),
-                JournalEntry.idempotency_key == f"supplier-payment:{blocked_invoice_id}",
+                JournalEntry.description == "Supplier payment CLOSED-PERIOD-ATTEMPT",
             )
         ) is None
 
