@@ -11,14 +11,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db_session
+from backend.app.finance.ledger import AccountingPeriodConflictError, JournalConflictError, create_journal_entry
 from backend.app.identity.api_dependencies import (
     TenantPrincipal,
     require_csrf_protection,
     require_module,
     require_permission,
 )
-from backend.app.identity.models import AuditEvent
+from backend.app.identity.models import AuditEvent, JournalEntry
 from backend.app.procurement.models import (
+    ProcurementAccountingSettings,
     PurchaseOrder,
     PurchaseOrderLine,
     Supplier,
@@ -186,6 +188,13 @@ def match_supplier_invoice(
     ).with_for_update())
     if order is None or order.supplier_id != invoice.supplier_id:
         raise HTTPException(status_code=409, detail="Purchase order and supplier no longer match")
+    accounting = db.scalar(select(ProcurementAccountingSettings).where(
+        ProcurementAccountingSettings.tenant_id == principal.tenant.id
+    ))
+    if accounting is None:
+        raise HTTPException(status_code=409, detail="Procurement accounting settings must be configured before invoice matching")
+    if invoice.currency != accounting.base_currency:
+        raise HTTPException(status_code=409, detail="Invoice currency must match the configured procurement base currency")
     lines = db.scalars(select(SupplierInvoiceLine).where(
         SupplierInvoiceLine.tenant_id == principal.tenant.id,
         SupplierInvoiceLine.supplier_invoice_id == invoice.id,
@@ -261,14 +270,48 @@ def post_supplier_invoice(
     ).with_for_update())
     if invoice is None:
         raise HTTPException(status_code=404, detail="Supplier invoice not found")
+    journal_key = f"procurement-invoice:{invoice.id}"
+    if invoice.status == "posted":
+        journal = db.scalar(select(JournalEntry).where(
+            JournalEntry.tenant_id == principal.tenant.id,
+            JournalEntry.idempotency_key == journal_key,
+        ))
+        return {**_invoice_dict(db, invoice), "journal_entry_id": str(journal.id) if journal else None, "replayed": True}
     if invoice.status != "approved":
         raise HTTPException(status_code=409, detail="Only approved invoices can be posted to accounts payable")
+    accounting = db.scalar(select(ProcurementAccountingSettings).where(
+        ProcurementAccountingSettings.tenant_id == principal.tenant.id
+    ))
+    if accounting is None:
+        raise HTTPException(status_code=409, detail="Procurement accounting settings are not configured")
+    if invoice.currency != accounting.base_currency:
+        raise HTTPException(status_code=409, detail="Invoice currency does not match procurement accounting base currency")
+    if invoice.total_minor <= 0 or invoice.total_minor > 2_147_483_647:
+        raise HTTPException(status_code=409, detail="Invoice total must be positive and within the general-ledger limit")
     invoice.status = "posted"
     invoice.updated_at = datetime.now(UTC)
-    _audit(db, principal, "finance.accounts_payable_posted", "supplier_invoice", invoice.id)
-    db.commit()
-    db.refresh(invoice)
-    return _invoice_dict(db, invoice)
+    try:
+        journal, _ = create_journal_entry(
+            db,
+            tenant_id=principal.tenant.id,
+            actor_user_id=principal.user.id,
+            idempotency_key=journal_key,
+            currency=invoice.currency,
+            description=f"Supplier invoice {invoice.invoice_number} posted to accounts payable"[:500],
+            posting_date=invoice.invoice_date,
+            lines=[
+                {"account_code": accounting.grni_account_code, "memo": "Clear goods received not invoiced", "debit_minor": invoice.total_minor, "credit_minor": 0},
+                {"account_code": accounting.ap_account_code, "memo": "Supplier accounts payable", "debit_minor": 0, "credit_minor": invoice.total_minor},
+            ],
+            commit=False,
+        )
+        _audit(db, principal, "finance.accounts_payable_posted", "supplier_invoice", invoice.id)
+        db.commit()
+        db.refresh(invoice)
+    except (AccountingPeriodConflictError, JournalConflictError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {**_invoice_dict(db, invoice), "journal_entry_id": str(journal.id), "replayed": False}
 
 
 @router.post("/invoices/{invoice_id}/payments", status_code=status.HTTP_201_CREATED)
@@ -298,7 +341,16 @@ def record_supplier_payment(
     if existing is not None:
         if existing.request_hash != digest:
             raise HTTPException(status_code=409, detail="Idempotency-Key was used for another payment")
-        return {"payment_id": str(existing.id), "invoice_id": str(existing.supplier_invoice_id), "replayed": True}
+        journal = db.scalar(select(JournalEntry).where(
+            JournalEntry.tenant_id == principal.tenant.id,
+            JournalEntry.idempotency_key == f"supplier-payment:{existing.id}",
+        ))
+        return {
+            "payment_id": str(existing.id),
+            "invoice_id": str(existing.supplier_invoice_id),
+            "journal_entry_id": str(journal.id) if journal else None,
+            "replayed": True,
+        }
     invoice = db.scalar(select(SupplierInvoice).where(
         SupplierInvoice.id == invoice_id,
         SupplierInvoice.tenant_id == principal.tenant.id,
@@ -307,11 +359,18 @@ def record_supplier_payment(
         raise HTTPException(status_code=404, detail="Supplier invoice not found")
     if invoice.status not in {"posted", "partially_paid"}:
         raise HTTPException(status_code=409, detail="Invoice must be posted to accounts payable before payment")
-    if payload.currency.upper() != invoice.currency:
-        raise HTTPException(status_code=409, detail="Payment currency must match invoice currency")
+    accounting = db.scalar(select(ProcurementAccountingSettings).where(
+        ProcurementAccountingSettings.tenant_id == principal.tenant.id
+    ))
+    if accounting is None:
+        raise HTTPException(status_code=409, detail="Procurement accounting settings are not configured")
+    if payload.currency.upper() != invoice.currency or invoice.currency != accounting.base_currency:
+        raise HTTPException(status_code=409, detail="Payment currency must match invoice and configured base currency")
     if payload.amount_minor > invoice.total_minor - invoice.paid_minor:
         raise HTTPException(status_code=409, detail="Payment exceeds outstanding invoice balance")
+    payment_id = uuid4()
     payment = SupplierPayment(
+        id=payment_id,
         tenant_id=principal.tenant.id,
         supplier_invoice_id=invoice.id,
         idempotency_key=key,
@@ -326,8 +385,23 @@ def record_supplier_payment(
     invoice.paid_minor += payload.amount_minor
     invoice.status = "paid" if invoice.paid_minor == invoice.total_minor else "partially_paid"
     invoice.updated_at = datetime.now(UTC)
+    journal_key = f"supplier-payment:{payment_id}"
     try:
         db.flush()
+        journal, _ = create_journal_entry(
+            db,
+            tenant_id=principal.tenant.id,
+            actor_user_id=principal.user.id,
+            idempotency_key=journal_key,
+            currency=invoice.currency,
+            description=f"Supplier payment {payload.payment_reference}"[:500],
+            posting_date=payload.payment_date,
+            lines=[
+                {"account_code": accounting.ap_account_code, "memo": "Settle supplier payable", "debit_minor": payload.amount_minor, "credit_minor": 0},
+                {"account_code": accounting.cash_account_code, "memo": "Cash or bank payment recorded", "debit_minor": 0, "credit_minor": payload.amount_minor},
+            ],
+            commit=False,
+        )
         _audit(db, principal, "finance.supplier_payment_recorded", "supplier_payment", payment.id)
         db.commit()
     except IntegrityError as exc:
@@ -337,10 +411,29 @@ def record_supplier_payment(
             SupplierPayment.idempotency_key == key,
         ))
         if raced is not None and raced.request_hash == digest:
-            return {"payment_id": str(raced.id), "invoice_id": str(raced.supplier_invoice_id), "replayed": True}
+            saved_journal = db.scalar(select(JournalEntry).where(
+                JournalEntry.tenant_id == principal.tenant.id,
+                JournalEntry.idempotency_key == f"supplier-payment:{raced.id}",
+            ))
+            return {
+                "payment_id": str(raced.id),
+                "invoice_id": str(raced.supplier_invoice_id),
+                "journal_entry_id": str(saved_journal.id) if saved_journal else None,
+                "replayed": True,
+            }
         raise HTTPException(status_code=409, detail="Payment conflicts with another request") from exc
-    return {"payment_id": str(payment.id), "invoice_id": str(invoice.id), "amount_minor": payment.amount_minor,
-            "outstanding_minor": invoice.total_minor - invoice.paid_minor, "status": invoice.status, "replayed": False}
+    except (AccountingPeriodConflictError, JournalConflictError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "payment_id": str(payment.id),
+        "invoice_id": str(invoice.id),
+        "amount_minor": payment.amount_minor,
+        "outstanding_minor": invoice.total_minor - invoice.paid_minor,
+        "status": invoice.status,
+        "journal_entry_id": str(journal.id),
+        "replayed": False,
+    }
 
 
 @router.get("/invoices")
