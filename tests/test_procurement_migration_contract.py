@@ -1,6 +1,4 @@
 from pathlib import Path
-
-
 INFRA = Path("migrations/0002_transactional_infrastructure.sql").read_text(encoding="utf-8").lower()
 PROCUREMENT = Path("migrations/0003_suppliers_purchase_orders.sql").read_text(encoding="utf-8").lower()
 
