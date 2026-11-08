@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Generator
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -75,6 +76,7 @@ def _register_growth(client: TestClient) -> tuple[str, dict[str, str]]:
 
 def test_purchase_to_stock_partial_receipt_and_idempotency(purchasing_client: TestClient) -> None:
     tenant_id, headers = _register_growth(purchasing_client)
+    tenant_uuid = UUID(tenant_id)
 
     supplier = purchasing_client.post(
         "/api/v1/procurement/suppliers",
@@ -161,16 +163,16 @@ def test_purchase_to_stock_partial_receipt_and_idempotency(purchasing_client: Te
     assert balances.json()["items"][0]["quantity_on_hand"] == 8
 
     with Session(purchasing_client.app.state.test_engine) as db:
-        saved_order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.tenant_id == tenant_id))
+        saved_order = db.scalar(select(PurchaseOrder).where(PurchaseOrder.tenant_id == tenant_uuid))
         movements = db.scalars(select(InventoryMovement).where(
-            InventoryMovement.tenant_id == tenant_id,
+            InventoryMovement.tenant_id == tenant_uuid,
             InventoryMovement.reference.like(f"{order_data['order_number']}/receipt/%"),
         )).all()
         receipts = db.scalars(select(ProcurementReceipt).where(
-            ProcurementReceipt.tenant_id == tenant_id,
+            ProcurementReceipt.tenant_id == tenant_uuid,
         )).all()
         audits = db.scalars(select(AuditEvent).where(
-            AuditEvent.tenant_id == tenant_id,
+            AuditEvent.tenant_id == tenant_uuid,
             AuditEvent.action.in_([
                 "procurement.purchase_order_created",
                 "procurement.purchase_order_approved",
