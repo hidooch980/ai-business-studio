@@ -37,7 +37,7 @@ def test_growth_includes_sales_and_procurement_but_does_not_claim_them_ready():
 def test_addon_includes_its_dependencies_without_licensing_them_as_addons():
     modules = _by_id(resolve_edition(Edition.STARTER, ("manufacturing",)))
     assert modules["manufacturing"]["included_by_edition_or_addon"] is True
-    assert modules["inventory"]["included_by_edition_or_addon"] is False
+    assert modules["inventory"]["included_by_edition_or_addon"] is True
     assert modules["inventory"]["module_id"] in modules["manufacturing"]["dependencies"]
 
 
