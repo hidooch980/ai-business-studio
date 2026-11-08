@@ -29,7 +29,7 @@ tenant data. The runtime role receives EXECUTE on the lookup function only;
 it receives no SELECT/INSERT/UPDATE/DELETE on the bootstrap table. The function
 uses a fixed search_path and schema-qualified table reference.
 
-The migration assumes the runtime database role is named `app_runtime`. If
+The migration assumes the runtime database role is named `retail_runtime`. If
 deployment uses another role, adjust the GRANT target in a reviewed migration
 before rollout; do not grant to PUBLIC.
 
@@ -61,7 +61,7 @@ before rollout; do not grant to PUBLIC.
 ## Security boundaries
 
 - `auth_bootstrap_owner` must remain NOLOGIN and NOBYPASSRLS.
-- `app_runtime` must not own RLS tables and must not be SUPERUSER or BYPASSRLS.
+- `retail_runtime` must not own RLS tables and must not be SUPERUSER or BYPASSRLS.
 - Runtime cannot read the bootstrap table directly; only EXECUTE is granted.
 - No SECURITY DEFINER function may return role, branch list, PII, token digest or
   arbitrary session metadata.
@@ -97,5 +97,5 @@ before rollout; do not grant to PUBLIC.
 Add PostgreSQL integration tests for valid lookup, unknown digest, expiry,
 revocation, inactive identity, revoked/suspended membership, role changes,
 cross-tenant access, branch membership removal, transaction rollback consistency,
-connection-pool context reset, and proof that app_runtime cannot SELECT the
+connection-pool context reset, and proof that retail_runtime cannot SELECT the
 bootstrap table or bypass RLS. The migration must run only in ephemeral CI.
