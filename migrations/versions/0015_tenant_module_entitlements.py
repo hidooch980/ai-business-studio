@@ -130,16 +130,37 @@ def upgrade() -> None:
                     )
                 )
 
-    connection.execute(sa.text(
-        """
-        INSERT INTO tenant_subscriptions
-            (id, tenant_id, edition, status, created_at, updated_at)
-        SELECT :subscription_id, id, 'starter', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        FROM tenants
-        """
-    ).bindparams(sa.bindparam("subscription_id", type_=sa.Uuid())).params(
-        subscription_id=uuid4()
-    ))
+    tenant_ids = connection.execute(sa.text("SELECT id FROM tenants")).scalars().all()
+    for tenant_id in tenant_ids:
+        connection.execute(
+            sa.text(
+                """
+                INSERT INTO tenant_subscriptions
+                    (id, tenant_id, edition, status, created_at, updated_at)
+                VALUES
+                    (:id, :tenant_id, 'starter', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """
+            ).bindparams(
+                sa.bindparam("id", type_=sa.Uuid()),
+                sa.bindparam("tenant_id", type_=sa.Uuid()),
+            ).params(id=uuid4(), tenant_id=tenant_id)
+        )
+        for module_id in ("platform", "catalog", "inventory", "finance", "reports"):
+            connection.execute(
+                sa.text(
+                    """
+                    INSERT INTO tenant_module_entitlements
+                        (id, tenant_id, module_id, source, is_entitled, is_enabled,
+                         created_at, updated_at)
+                    VALUES
+                        (:id, :tenant_id, :module_id, 'edition', TRUE, TRUE,
+                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """
+                ).bindparams(
+                    sa.bindparam("id", type_=sa.Uuid()),
+                    sa.bindparam("tenant_id", type_=sa.Uuid()),
+                ).params(id=uuid4(), tenant_id=tenant_id, module_id=module_id)
+            )
 
 
 def downgrade() -> None:
