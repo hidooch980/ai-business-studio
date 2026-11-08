@@ -13,6 +13,7 @@ from backend.app.identity.invitation_api import router as invitation_router
 from backend.app.inventory.api import router as inventory_router
 from backend.app.modules.api import router as modules_router
 from backend.app.procurement.api import router as procurement_router
+from backend.app.procurement.payables_api import router as payables_router
 from backend.app.version import PRODUCT_VERSION
 
 
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     application.include_router(finance_reports_router, prefix="/api/v1")
     application.include_router(inventory_router, prefix="/api/v1")
     application.include_router(procurement_router, prefix="/api/v1")
+    application.include_router(payables_router, prefix="/api/v1")
     return application
 
 
