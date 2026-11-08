@@ -12,6 +12,7 @@ END
 $role$;
 
 GRANT USAGE ON SCHEMA public TO auth_session_lookup_owner;
+GRANT CREATE ON SCHEMA public TO auth_session_lookup_owner;
 GRANT SELECT (id, tenant_id, identity_id, refresh_token_hash, expires_at, revoked_at)
     ON TABLE public.auth_sessions TO auth_session_lookup_owner;
 
@@ -36,6 +37,7 @@ AS $function$
 $function$;
 
 ALTER FUNCTION public.resolve_auth_session(bytea) OWNER TO auth_session_lookup_owner;
+REVOKE CREATE ON SCHEMA public FROM auth_session_lookup_owner;
 REVOKE ALL ON FUNCTION public.resolve_auth_session(bytea) FROM PUBLIC;
 
 -- Runtime role is provisioned by deployment before migrations are applied.
