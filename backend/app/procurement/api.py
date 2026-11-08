@@ -129,7 +129,11 @@ def preview_replenishment(
         "suggested_purchase_quantity": str(remaining),
         "suggested_transfer_quantity": str(result.suggested_quantity - remaining),
         "selected_supplier_id": chosen.supplier_id if chosen else None,
-        "estimated_cost_minor": int((remaining * (chosen.landed_unit_cost_minor if chosen else 0)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)),
+        "estimated_cost_minor": int(
+            (remaining * (chosen.landed_unit_cost_minor if chosen else 0)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        ),
         "priority_score": str(result.priority_score),
         "confidence": result.confidence,
         "reasons": list(result.reasons),
