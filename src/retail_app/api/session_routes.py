@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -47,7 +47,7 @@ def create_session_router(database: Any) -> APIRouter:
         response.set_cookie(
             COOKIE_NAME,
             issued.refresh_token,
-            max_age=int((issued.expires_at - issued.expires_at.now(issued.expires_at.tzinfo)).total_seconds()),
+            max_age=int((issued.expires_at - datetime.now(UTC)).total_seconds()),
             path="/",
             secure=True,
             httponly=True,
