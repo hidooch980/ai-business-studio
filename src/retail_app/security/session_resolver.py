@@ -120,11 +120,12 @@ class SessionResolver:
 
         if membership_denied:
             raise HTTPException(status_code=401, detail="authentication required")
+        assert role is not None
 
         return AccessContext(
             subject_id=str(identity_id),
             tenant_id=str(tenant_id),
-            role=role or Role.EMPLOYEE,
+            role=role,
             branch_ids=branch_ids,
             active=True,
         )
