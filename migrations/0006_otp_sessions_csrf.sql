@@ -160,4 +160,80 @@ BEGIN
 END
 $grant$;
 
+
+GRANT SELECT (csrf_token_hash)
+    ON public.auth_sessions TO auth_session_lookup_owner;
+
+-- Replace the initial resolver with a narrowly-scoped variant that also
+-- returns the stored CSRF digest. Runtime still cannot SELECT auth_sessions.
+DROP FUNCTION public.resolve_auth_session(bytea);
+CREATE FUNCTION public.resolve_auth_session(p_token_sha256 bytea)
+RETURNS TABLE (
+    session_id uuid,
+    tenant_id uuid,
+    identity_id uuid,
+    csrf_token_hash bytea
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+    matched_session record;
+BEGIN
+    IF p_token_sha256 IS NULL OR octet_length(p_token_sha256) <> 32 THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (NULL, 'unknown');
+        RETURN;
+    END IF;
+
+    SELECT s.id, s.tenant_id, s.identity_id, s.expires_at,
+           s.revoked_at, s.csrf_token_hash
+      INTO matched_session
+    FROM public.auth_sessions AS s
+    WHERE s.refresh_token_hash = p_token_sha256
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (NULL, 'unknown');
+        RETURN;
+    END IF;
+
+    IF matched_session.revoked_at IS NOT NULL THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (matched_session.id, 'revoked');
+        RETURN;
+    END IF;
+
+    IF matched_session.expires_at <= clock_timestamp() THEN
+        INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+        VALUES (matched_session.id, 'expired');
+        RETURN;
+    END IF;
+
+    INSERT INTO public.auth_session_lookup_audit (session_id, outcome)
+    VALUES (matched_session.id, 'matched');
+
+    RETURN QUERY
+    SELECT matched_session.id, matched_session.tenant_id,
+           matched_session.identity_id, matched_session.csrf_token_hash;
+END
+$function$;
+
+ALTER FUNCTION public.resolve_auth_session(bytea) OWNER TO auth_session_lookup_owner;
+REVOKE ALL ON FUNCTION public.resolve_auth_session(bytea) FROM PUBLIC;
+
+DO $resolver_grant$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'retail_runtime') THEN
+        GRANT EXECUTE ON FUNCTION public.resolve_auth_session(bytea) TO retail_runtime;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'retail_session_runtime') THEN
+        GRANT EXECUTE ON FUNCTION public.resolve_auth_session(bytea) TO retail_session_runtime;
+    END IF;
+END
+$resolver_grant$;
+
 COMMIT;
