@@ -128,16 +128,16 @@ Primary outcomes:
 - No module may update another module's tables directly; use domain services and explicit event contracts.
 - Every posted event carries tenant, company, actor/system identity, source document, currency, effective date, and correlation ID.
 
-## 5. AI and decision intelligence
+## 5. Product editions and modular versioning\n\nThe edition, module dependency, entitlement, lifecycle and release-versioning contract is defined in [PRODUCT_EDITION_AND_MODULE_VERSIONING.md](PRODUCT_EDITION_AND_MODULE_VERSIONING.md). This document is the product packaging baseline; its edition bundles are targets and do not imply that planned modules are implemented.\n\n## 6. AI and decision intelligence
 
-### 5.1 Intelligence services
+### 6.1 Intelligence services
 - Forecasting: demand, replenishment, cash flow, collections, workforce capacity, production, and service load.
 - Detection: unusual discounts, duplicate invoices, stock shrinkage, suspicious refunds, payroll anomalies, supplier price drift, and journal outliers.
 - Optimization: reorder quantities, replenishment routes, production schedules, staffing suggestions, and cash allocation.
 - Natural-language assistant over permission-filtered business facts with source citations, data freshness, and explicit uncertainty.
 - Explainable recommendations: inputs, assumptions, confidence, expected impact, alternatives, and reason codes.
 
-### 5.2 AI safety and governance
+### 6.2 AI safety and governance
 - Tenant-isolated feature stores and retrieval; no cross-tenant leakage.
 - Explicit consent and policy for model training; customer data is not used for training by default.
 - PII minimization, redaction, retention limits, access logs, and export controls.
