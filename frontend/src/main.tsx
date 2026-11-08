@@ -8,7 +8,7 @@ declare const __BUILD_ID__: string;
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    const workerUrl = new URL("../sw.js", import.meta.url);
+    const workerUrl = new URL("/sw.js", window.location.origin);
     workerUrl.searchParams.set("v", `${__APP_VERSION__}-${__BUILD_ID__}`);
     let reloading = false;
 
