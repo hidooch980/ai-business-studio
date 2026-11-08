@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Callable
+from typing import Annotated, Any, Callable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from typing import Annotated
 
 from retail_app.security.authorization import AccessContext
-
 from retail_app.security.session_service import (
     SessionAuthenticationError,
     SessionService,
