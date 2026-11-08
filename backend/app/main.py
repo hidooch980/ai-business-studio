@@ -12,13 +12,14 @@ from backend.app.identity.api import router as auth_router
 from backend.app.identity.invitation_api import router as invitation_router
 from backend.app.inventory.api import router as inventory_router
 from backend.app.procurement.api import router as procurement_router
+from backend.app.version import PRODUCT_VERSION
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
+        version=PRODUCT_VERSION,
         description="AI Business Studio API",
     )
     application.include_router(health_router, prefix="/api/v1")
