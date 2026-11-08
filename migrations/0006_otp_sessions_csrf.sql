@@ -17,8 +17,6 @@ CREATE POLICY auth_session_lookup_owner_identity_read
 
 GRANT SELECT, INSERT, UPDATE
     ON public.otp_challenges TO auth_session_lookup_owner;
-GRANT USAGE ON SEQUENCE public.otp_challenges_id_seq
-    TO auth_session_lookup_owner;
 CREATE POLICY auth_session_lookup_owner_otp_access
     ON public.otp_challenges FOR ALL TO auth_session_lookup_owner
     USING (true) WITH CHECK (true);
