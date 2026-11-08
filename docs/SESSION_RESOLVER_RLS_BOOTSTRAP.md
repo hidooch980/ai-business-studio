@@ -53,10 +53,14 @@ before rollout; do not grant to PUBLIC.
 6. Resolve branch membership from current `branch_memberships`. Enforce
    branch scope in the service query/policy; no branch membership means no
    branch-scoped access.
-7. Build the immutable AccessContext from these database rows and execute all
-   protected reads/writes in this same transaction. Transaction-local settings
-   are cleared automatically at transaction end; never split context setup and
-   protected work across pooled connections.
+7. Build the immutable AccessContext from these database rows. The resolver
+   transaction ends after identity resolution. Each business unit-of-work must
+   open its own tenant transaction, set the same trusted context transaction-
+   locally, and revalidate active identity, tenant, membership and role (plus
+   the current branch set for branch roles) before protected reads/writes. Keep
+   each protected read/write sequence in that one business transaction.
+   Transaction-local settings clear automatically; never reuse a connection
+   with session-level tenant/subject settings.
 
 ## Security boundaries
 
