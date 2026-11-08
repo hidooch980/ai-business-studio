@@ -171,6 +171,14 @@ class AuthService:
                     self._session_ttl_seconds, session_id,
                 ),
             )
+            connection.execute(
+                """
+                INSERT INTO public.security_audit_events
+                    (id, tenant_id, actor_identity_id, event_type, outcome, subject_identity_id)
+                VALUES (%s, %s, %s, 'auth.session.rotated', 'success', %s)
+                """,
+                (uuid4(), context.tenant_id, context.subject_id, context.subject_id),
+            )
         return raw_token, csrf_token
 
     def revoke_session(self, context: AccessContext, session_id: str) -> None:
@@ -184,4 +192,12 @@ class AuthService:
                   AND revoked_at IS NULL
                 """,
                 (session_id, context.tenant_id, context.subject_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO public.security_audit_events
+                    (id, tenant_id, actor_identity_id, event_type, outcome, subject_identity_id)
+                VALUES (%s, %s, %s, 'auth.session.logout', 'success', %s)
+                """,
+                (uuid4(), context.tenant_id, context.subject_id, context.subject_id),
             )
