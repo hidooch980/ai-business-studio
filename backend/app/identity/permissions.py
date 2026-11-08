@@ -19,5 +19,7 @@ PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
     ("reports.read", "View reports"),
     ("reports.export", "Export reports"),
     ("settings.manage", "Manage tenant settings"),
+    ("modules.read", "View tenant module entitlements and subscription"),
+    ("modules.manage", "Change tenant edition and enable or disable entitled modules"),
 )
 
