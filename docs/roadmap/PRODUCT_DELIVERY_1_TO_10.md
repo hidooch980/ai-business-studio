@@ -85,8 +85,15 @@ Status: **Product catalog and inventory ledger foundations implemented; ERP work
 - [ ] POS analytics, AI advisory insights, device adapters (scanner/printer/customer display/cash drawer), operational monitoring and release gates.
 - [ ] Implemented Smart POS scope and staged release gates documented in `docs/architecture/SMART_POS.md`; documentation is scope approval, not implementation evidence.
 - [ ] CRM, customer support, and loyalty.
+- [ ] Smart procurement data readiness: supplier master, product categories, units/conversions, branch/warehouse stock and trusted sales/receipt history.
+- [ ] Deterministic replenishment engine: sellable inventory position, reservations, inbound supply, safety stock, reorder point, days of cover, MOQ/pack rounding and draft purchase recommendations.
+- [ ] Fast-mover and stockout-risk prioritization with demand acceleration, seasonality/promotion context, margin, expiry, storage and budget constraints.
+- [ ] Supplier scorecards and RFQ comparison using landed cost, quality, lead-time variability, fill rate, reliability, payment terms and contract eligibility.
+- [ ] Purchase request approval workflow, separation of requester/approver, draft-to-PO lineage, partial receipts and three-way invoice matching.
+- [ ] Forecast backtesting, confidence intervals, drift monitoring, stale-data fail-safe, branch transfer optimization and scheduled draft recommendations.
+- [ ] Smart procurement scope and acceptance criteria documented in `docs/architecture/SMART_PROCUREMENT.md`; documentation is not implementation evidence.
 
-Exit gate: end-to-end purchase-to-stock and order-to-cash workflows with reconciliation tests.
+Exit gate: end-to-end purchase-to-stock and order-to-cash workflows with reconciliation tests; smart procurement additionally requires forecast backtesting, tenant/permission tests, approval controls, and staging evidence from recommendation through receipt and invoice match.
 
 ## 5. Workflow and notifications
 
@@ -111,6 +118,8 @@ Status: **Not started**
 
 - [ ] Tenant-scoped analytics data contracts and consent controls.
 - [ ] Forecasting and anomaly detection with measurable baselines.
+- [ ] Demand forecasting by SKU/branch with stockout-censored demand, promotion/seasonality context, backtesting and confidence calibration.
+- [ ] Replenishment recommendation explanations with forecast, inventory position, cover days, expected stockout, supplier lead time, estimated landed cost and expected impact.
 - [ ] AI assistant with citations to tenant-authorized business data.
 - [ ] Human approval for financial or operational actions.
 - [ ] Model monitoring, drift detection, evaluation sets, and rollback.
@@ -127,6 +136,7 @@ Status: **Not started**
 - [ ] Import/export and documented public API.
 - [ ] External ERP/accounting connectors with mapping and reconciliation.
 - [ ] Secret rotation, webhook replay defense, and provider outage handling.
+- [ ] Supplier catalog/price-list import and supplier EDI/API adapters with validation, provenance and replay protection.
 
 Exit gate: provider sandbox evidence, contract tests, idempotency, and operational runbooks.
 
@@ -139,6 +149,7 @@ Status: **Not started**
 - [ ] Responsive mobile web/PWA.
 - [ ] Offline queue and conflict-resolution UX.
 - [ ] Desktop/mobile packaging only after API contracts stabilize.
+- [ ] Smart procurement workbench: buy-now/soon/watch queues, fast movers, stockout alerts, excess/expiry alerts, supplier comparison, scenario simulation and explainable recommendations.
 
 Exit gate: accessibility, localization, browser/device, and offline recovery tests.
 
@@ -177,4 +188,6 @@ A green foundation CI run is not evidence that stages 2-10 are complete. The cur
 
 The comprehensive target architecture, domain boundaries, cross-module invariants, AI governance, integration requirements, phased delivery gates, and module definition-of-done are maintained in [MASTER_ERP_BLUEPRINT.md](../architecture/MASTER_ERP_BLUEPRINT.md).
 
-This blueprint is approved scope only. The checkboxes and stage statuses above remain the execution ledger; do not mark any capability complete until its implementation, migrations, tests, CI evidence, and operational acceptance exist on the same commit.
+Demand-driven procurement scope, calculation rules, controls, lifecycle, dashboards, and acceptance criteria are detailed in [SMART_PROCUREMENT.md](../architecture/SMART_PROCUREMENT.md).
+
+These blueprints are approved scope only. The checkboxes and stage statuses above remain the execution ledger; do not mark any capability complete until its implementation, migrations, tests, CI evidence, and operational acceptance exist on the same commit.
