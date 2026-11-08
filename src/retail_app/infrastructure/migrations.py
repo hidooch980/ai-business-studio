@@ -1,8 +1,8 @@
 """Ordered PostgreSQL SQL migration runner with a session advisory lock."""
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 MIGRATION_LOCK_ID = 7_341_102_026
 
