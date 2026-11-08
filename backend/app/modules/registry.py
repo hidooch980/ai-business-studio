@@ -196,7 +196,7 @@ def resolve_edition(edition: Edition | str, addons: tuple[str, ...] = ()) -> dic
         "edition_name": definition.name,
         "modules": modules,
         "notice": (
-            "Catalog metadata is not an authorization grant. Enforce persisted tenant entitlements,
+            "Catalog metadata is not an authorization grant. Enforce persisted tenant entitlements",
             "feature flags and RBAC on every server-side operation.",
         ),
     }
