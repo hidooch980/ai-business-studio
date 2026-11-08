@@ -70,7 +70,7 @@ def create_auth_router(service: AuthService, *, session_ttl_seconds: int = 25920
     def rotate_session(
         request: Request,
         response: Response,
-        context: AccessContext = Depends(require_authenticated_access_context),  # noqa: B008
+        context: AccessContext = Depends(require_authenticated_access_context),  # noqa: B008  # noqa: B008
     ) -> dict[str, str]:
         session_id = getattr(request.state, "session_id", None)
         if not session_id:
@@ -83,7 +83,7 @@ def create_auth_router(service: AuthService, *, session_ttl_seconds: int = 25920
     def logout(
         request: Request,
         response: Response,
-        context: AccessContext = Depends(require_authenticated_access_context),  # noqa: B008
+        context: AccessContext = Depends(require_authenticated_access_context),  # noqa: B008  # noqa: B008
     ) -> dict[str, str]:
         session_id = getattr(request.state, "session_id", None)
         if session_id:
