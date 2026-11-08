@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -56,7 +57,7 @@ def _record_security_event(
            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)""",
         (
             str(uuid4()), tenant_id, subject_id, event_type, outcome,
-            subject_id, __import__("json").dumps(metadata or {}, separators=(",", ":"), sort_keys=True),
+            subject_id, json.dumps(metadata or {}, separators=(",", ":"), sort_keys=True),
         ),
     )
 
