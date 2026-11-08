@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import date, datetime, UTC
+from datetime import UTC, date, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
