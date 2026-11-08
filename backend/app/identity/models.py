@@ -324,3 +324,74 @@ class FinancialPeriod(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class TenantSubscription(Base):
+    __tablename__ = "tenant_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_tenant_subscription_tenant"),
+        CheckConstraint(
+            "edition IN ('starter', 'growth', 'business', 'enterprise')",
+            name="ck_tenant_subscription_edition",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'suspended')",
+            name="ck_tenant_subscription_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    edition: Mapped[str] = mapped_column(String(24), default="starter", nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+
+class TenantModuleEntitlement(Base):
+    __tablename__ = "tenant_module_entitlements"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "module_id", name="uq_tenant_module_entitlement"),
+        CheckConstraint(
+            "length(trim(module_id)) > 0",
+            name="ck_tenant_module_entitlement_module_id",
+        ),
+        CheckConstraint(
+            "source IN ('edition', 'addon')",
+            name="ck_tenant_module_entitlement_source",
+        ),
+        Index(
+            "ix_tenant_module_entitlements_tenant_enabled",
+            "tenant_id", "is_enabled",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    module_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), default="edition", nullable=False)
+    is_entitled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
