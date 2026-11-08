@@ -40,6 +40,27 @@ def _digest(token: str) -> bytes:
     return hashlib.sha256(token.encode("ascii")).digest()
 
 
+def _record_security_event(
+    connection: Any,
+    *,
+    tenant_id: str,
+    subject_id: str,
+    event_type: str,
+    outcome: str,
+    metadata: dict[str, object] | None = None,
+) -> None:
+    connection.execute(
+        """INSERT INTO security_audit_events
+           (id, tenant_id, actor_identity_id, event_type, outcome,
+            subject_identity_id, metadata)
+           VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)""",
+        (
+            str(uuid4()), tenant_id, subject_id, event_type, outcome,
+            subject_id, __import__("json").dumps(metadata or {}, separators=(",", ":"), sort_keys=True),
+        ),
+    )
+
+
 class SessionService:
     """Database-backed session lifecycle; callers must authenticate before issue()."""
 
@@ -78,6 +99,11 @@ class SessionService:
                    VALUES (%s, %s, %s, %s, %s, %s)""",
                 (session_id, tenant_id, subject_id, _digest(token), expires_at, family_id),
             )
+            _record_security_event(
+                connection, tenant_id=tenant_id, subject_id=subject_id,
+                event_type="session.issued", outcome="success",
+                metadata={"session_id": session_id},
+            )
         return IssuedSession(session_id, token, expires_at)
 
     def rotate(self, token: str) -> IssuedSession:
@@ -89,7 +115,7 @@ class SessionService:
         new_id = str(uuid4())
         now = datetime.now(UTC)
         new_expiry = now + self.lifetime
-        replay = False
+        failure: str | None = None
         issued: IssuedSession | None = None
 
         with self.database.transaction() as connection:
@@ -114,13 +140,20 @@ class SessionService:
             if old is None:
                 raise SessionAuthenticationError("invalid session")
             family_id, revoked_at, expires_at = old
-            if revoked_at is not None or expires_at <= now:
+            if revoked_at is not None:
                 connection.execute(
                     """UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, statement_timestamp())
                        WHERE token_family_id = %s AND revoked_at IS NULL""",
                     (family_id,),
                 )
-                replay = revoked_at is not None
+                failure = "replay"
+            elif expires_at <= now:
+                connection.execute(
+                    """UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, statement_timestamp())
+                       WHERE token_family_id = %s AND revoked_at IS NULL""",
+                    (family_id,),
+                )
+                failure = "expired"
             else:
                 identity = connection.execute(
                     "SELECT is_active FROM identities WHERE id = %s FOR SHARE", (subject_id,)
@@ -140,7 +173,7 @@ class SessionService:
                            WHERE token_family_id = %s AND revoked_at IS NULL""",
                         (family_id,),
                     )
-                    replay = True
+                    failure = "membership_revoked"
                 else:
                     connection.execute(
                         """UPDATE auth_sessions SET revoked_at = statement_timestamp(),
@@ -156,11 +189,28 @@ class SessionService:
                         (new_id, tenant_id, subject_id, _digest(new_token), new_expiry, old_id, family_id),
                     )
                     issued = IssuedSession(new_id, new_token, new_expiry)
+            if failure is not None:
+                _record_security_event(
+                    connection, tenant_id=tenant_id, subject_id=subject_id,
+                    event_type={
+                        "replay": "session.refresh_replay_detected",
+                        "expired": "session.refresh_expired",
+                        "membership_revoked": "session.refresh_denied",
+                    }[failure],
+                    outcome="denied",
+                    metadata={"session_id": old_id, "reason": failure},
+                )
+            elif issued is not None:
+                _record_security_event(
+                    connection, tenant_id=tenant_id, subject_id=subject_id,
+                    event_type="session.refresh_rotated", outcome="success",
+                    metadata={"old_session_id": old_id, "new_session_id": new_id},
+                )
 
-        if replay:
+        if failure == "replay":
             raise RefreshTokenReplayError("refresh token reuse detected; session family revoked")
-        if issued is None:
-            raise SessionAuthenticationError("invalid session")
+        if failure is not None or issued is None:
+            raise SessionAuthenticationError("session is expired, revoked or no longer authorized")
         return issued
 
     def revoke(self, token: str) -> bool:
@@ -185,6 +235,12 @@ class SessionService:
                      AND refresh_token_hash = %s AND revoked_at IS NULL""",
                 (session_id, tenant_id, subject_id, digest),
             )
+            if result.rowcount == 1:
+                _record_security_event(
+                    connection, tenant_id=tenant_id, subject_id=subject_id,
+                    event_type="session.revoked", outcome="success",
+                    metadata={"session_id": str(session_id)},
+                )
             return result.rowcount == 1
 
     def revoke_all(self, *, tenant_id: str, subject_id: str) -> int:
@@ -197,4 +253,10 @@ class SessionService:
                    WHERE tenant_id = %s AND identity_id = %s AND revoked_at IS NULL""",
                 (tenant_id, subject_id),
             )
+            if result.rowcount:
+                _record_security_event(
+                    connection, tenant_id=tenant_id, subject_id=subject_id,
+                    event_type="session.revoke_all", outcome="success",
+                    metadata={"revoked_count": result.rowcount},
+                )
             return result.rowcount
