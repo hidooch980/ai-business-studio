@@ -150,3 +150,23 @@ def test_delivery_failure_invalidates_persisted_challenge(service):
 def test_missing_or_weak_peppers_fail_closed():
     with pytest.raises(OTPUnavailable):
         OTPConfig(b"short", b"b" * 32)
+
+
+def test_five_failed_attempts_block_later_correct_code(service):
+    svc, repo, _, delivery = service
+    receipt = svc.request_code(
+        "+12025550106", OTPChannel.SMS, OTPPurpose.LOGIN,
+        rate_limit_keys=("ip:test",),
+    )
+    for _ in range(5):
+        with pytest.raises(OTPRejected):
+            svc.verify_code(
+                receipt.challenge_id, "000000", OTPPurpose.LOGIN,
+                rate_limit_keys=("ip:test",),
+            )
+    with pytest.raises(OTPRejected):
+        svc.verify_code(
+            receipt.challenge_id, delivery.code, OTPPurpose.LOGIN,
+            rate_limit_keys=("ip:test",),
+        )
+    assert repo.failures[receipt.challenge_id] == 5
