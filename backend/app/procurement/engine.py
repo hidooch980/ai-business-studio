@@ -5,10 +5,10 @@ same rules can be tested, backtested, and used as a safe fallback.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from statistics import mean, pstdev
-from typing import Sequence
 
 D = Decimal
 _SERVICE_Z = {D("0.90"): D("1.282"), D("0.95"): D("1.645"), D("0.97"): D("1.881"), D("0.99"): D("2.326")}
@@ -149,7 +149,15 @@ def calculate_replenishment(data: ReplenishmentInput, landed_unit_cost_minor: in
             quantity = D("0")
     estimated_cost = int((quantity * landed_unit_cost_minor).quantize(D('1'), rounding=ROUND_HALF_UP))
     urgency_days = (inventory_position / forecast) if forecast > 0 else D("Infinity")
-    urgency = D("100") if urgency_days <= lead else D("70") if urgency_days <= lead + 3 else D("40") if urgency_days <= lead + 7 else D("10")
+    urgency = (
+        D("100")
+        if urgency_days <= lead
+        else D("70")
+        if urgency_days <= lead + 3
+        else D("40")
+        if urgency_days <= lead + 7
+        else D("10")
+    )
     score = min(D("100"), urgency + min(D("20"), forecast * D("2")))
     reasons = [
         f"forecast_daily_demand={forecast}",
