@@ -215,3 +215,16 @@ def test_resolver_clock_must_be_timezone_aware(auth_records):
             PostgresDatabase(RUNTIME_URL),
             clock=lambda: datetime.now().replace(tzinfo=None),
         )(_request(auth_records["token"]))
+
+def test_lookup_owner_has_only_session_table_read_scope():
+    with psycopg.connect(DATABASE_URL) as conn:
+        privileges = conn.execute(
+            """
+            SELECT
+                has_table_privilege('auth_session_lookup_owner', 'public.auth_sessions', 'SELECT'),
+                has_table_privilege('auth_session_lookup_owner', 'public.identities', 'SELECT'),
+                has_table_privilege('auth_session_lookup_owner', 'public.tenants', 'SELECT'),
+                pg_has_role('retail_session_runtime', 'auth_session_lookup_owner', 'MEMBER')
+            """
+        ).fetchone()
+    assert privileges == (True, False, False, False)
