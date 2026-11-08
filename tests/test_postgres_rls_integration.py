@@ -789,6 +789,7 @@ def _live_session(token: str, *, expires: str = "1 day", revoked: bool = False):
 def _resolve_live(token: str):
     from starlette.requests import Request
 
+    from retail_app.api.session_resolver import PostgresSessionResolver
     from retail_app.infrastructure.database import PostgresDatabase
 
     request = Request({
@@ -1055,7 +1056,6 @@ def test_26_concurrent_refresh_allows_one_rotation_and_replay_revokes_successor(
 
     from fastapi import HTTPException
 
-    from retail_app.api.session_resolver import PostgresSessionResolver
     from retail_app.infrastructure.database import PostgresDatabase
     from retail_app.security.session_service import RefreshTokenReplayError, SessionService
 
