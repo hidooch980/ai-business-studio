@@ -147,12 +147,11 @@ def test_2_missing_request_context_sees_no_tenant_data_and_cannot_insert(runtime
     with runtime.transaction():
         set_context(runtime)
         assert runtime.execute("SELECT count(*) FROM tenants").fetchone()[0] == 0
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            with runtime.transaction():
-                runtime.execute(
-                    "INSERT INTO tenants (id, name) VALUES (%s, 'forbidden')",
-                    (UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),),
-                )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), runtime.transaction():
+            runtime.execute(
+                "INSERT INTO tenants (id, name) VALUES (%s, 'forbidden')",
+                (UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),),
+            )
 
 
 def test_3_tenant_context_cannot_read_another_tenant(runtime):
@@ -185,15 +184,14 @@ def test_6_identity_visibility_is_self_or_same_tenant_only(runtime):
             row[0] for row in runtime.execute("SELECT id FROM identities").fetchall()
         }
         assert visible == {USER_A, USER_A2,}
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            with runtime.transaction():
-                runtime.execute(
-                    """
-                    INSERT INTO identities (id, account_type, phone_e164)
-                    VALUES (%s, 'workforce', '+12025550999')
-                    """,
-                    (UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"),),
-                )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), runtime.transaction():
+            runtime.execute(
+                """
+                INSERT INTO identities (id, account_type, phone_e164)
+                VALUES (%s, 'workforce', '+12025550999')
+                """,
+                (UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"),),
+            )
 
 
 def test_7_anonymous_otp_rows_require_explicit_onboarding_context(runtime):
