@@ -1,6 +1,6 @@
 # Procurement Integration Reconciliation
 
-Status: investigation complete; implementation not yet ported.
+Status: foundation implementation staged; integration and PostgreSQL CI verification pending.
 
 ## Decision
 
@@ -45,6 +45,15 @@ All new work is staged on `integration/procurement-foundation-2026-11`, created 
 
 Sales, cash register, and POS remain out of scope. They may begin only after the complete purchase and payment dependency chain is integrated and all final tests pass on the integrated candidate.
 
+## Current implementation on the integration branch
+
+- Migration `0002_transactional_infrastructure.sql`: tenant-scoped idempotency records, immutable domain events, transactional outbox, and append-only business audit events.
+- Migration `0003_suppliers_purchase_orders.sql`: tenant-scoped suppliers, branch-scoped purchase orders, and purchase-order lines.
+- Python infrastructure: PostgreSQL transaction boundary with transaction-local RLS context, ordered SQL migration runner with advisory locking, audit writer, domain-event/outbox writer, and canonical request hashing/idempotency reservation helpers.
+- Procurement domain: supplier and purchase-order value objects using integer minor currency units and milli-quantity precision.
+- Authorization: supplier and purchase-order permissions added to the existing deny-by-default role model. Branch managers may create/read orders; approval remains owner-admin only.
+- CI now includes pushes to `integration/**` so this work can be verified before a pull request is opened.
+
 ## Verification status
 
-The upstream feature branches have passing CI reports at their recorded commits, but those results do not validate compatibility with the current `main` tree. No procurement code has yet been ported to this integration branch, no migration has been applied, and no integrated test result is claimed.
+The code and migrations have been committed to the integration branch, but PostgreSQL migrations and the complete test suite have not yet been observed running on this branch. No deployment or merge to `main` has occurred. The migration runner expects a fresh database or an explicitly baselined migration ledger; a database where `0001` was manually applied must be baselined before running it.
