@@ -1,11 +1,11 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, StringConstraints
 
-from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
+from backend.app.identity.api_dependencies import TenantPrincipal, require_module
 from backend.app.procurement.engine import (
     DemandPoint,
     ReplenishmentInput,
@@ -70,7 +70,7 @@ class ProcurementPreviewRequest(BaseModel):
 @router.post("/preview")
 def preview_replenishment(
     payload: ProcurementPreviewRequest,
-    _principal: TenantPrincipal = Depends(require_permission("procurement.read")),
+    _principal: TenantPrincipal = Depends(require_module("procurement", "procurement.read")),
 ) -> dict:
     ranked = rank_supplier_quotes([
         SupplierQuote(**quote.model_dump()) for quote in payload.suppliers
