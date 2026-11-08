@@ -37,9 +37,7 @@ CREATE OR REPLACE FUNCTION public.resolve_auth_session(p_token_sha256 bytea)
 RETURNS TABLE (
     session_id uuid,
     tenant_id uuid,
-    identity_id uuid,
-    expires_at timestamptz,
-    revoked_at timestamptz
+    identity_id uuid
 )
 LANGUAGE plpgsql
 VOLATILE
