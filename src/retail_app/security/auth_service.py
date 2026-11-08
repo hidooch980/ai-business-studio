@@ -7,7 +7,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-from collections.abc import Callable
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
