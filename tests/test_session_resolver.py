@@ -249,9 +249,12 @@ def test_session_lookup_audit_records_outcome_without_token_hash(auth_records):
         ).fetchone()
     assert event == (auth_records["session_id"], "matched")
 
-    with psycopg.connect(RUNTIME_URL) as conn:
-        with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
-            conn.execute("SELECT * FROM auth_session_lookup_audit").fetchall()
+    with (
+        psycopg.connect(RUNTIME_URL) as conn,
+        conn.transaction(),
+        pytest.raises(psycopg.errors.InsufficientPrivilege),
+    ):
+        conn.execute("SELECT * FROM auth_session_lookup_audit").fetchall()
 
 def test_membership_denial_is_written_to_tenant_security_audit(auth_records):
     from fastapi import HTTPException
