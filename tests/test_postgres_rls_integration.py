@@ -374,3 +374,30 @@ def test_11_supplier_and_purchase_order_services_commit_atomically_and_replay(ru
             "SELECT count(*) FROM audit_events WHERE resource_id IN (%s, %s)",
             (supplier_id, order.id),
         ).fetchone()[0] == 2
+
+
+def test_12_concurrent_supplier_create_replays_one_idempotent_result():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.procurement.service import create_supplier
+    from retail_app.procurement.suppliers import Supplier
+    from retail_app.security.authorization import AccessContext, Role
+
+    database = PostgresDatabase(RUNTIME_URL)
+    actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
+    supplier = Supplier(str(uuid4()), str(TENANT_A), "Concurrent Supplier")
+    barrier = Barrier(2)
+
+    def create_once():
+        barrier.wait(timeout=10)
+        return create_supplier(
+            database, actor, supplier, idempotency_key="supplier-concurrent-0001"
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: create_once(), range(2)))
+
+    assert results[0] == results[1]
