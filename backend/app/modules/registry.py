@@ -157,15 +157,29 @@ def resolve_edition(edition: Edition | str, addons: tuple[str, ...] = ()) -> dic
     modules = []
     for module_id in sorted(expanded):
         module = MODULE_BY_ID[module_id]
+        required_entitlements: set[str] = set()
+        dependency_queue = list(module.dependencies)
+        while dependency_queue:
+            dependency_id = dependency_queue.pop()
+            if dependency_id in required_entitlements:
+                continue
+            required_entitlements.add(dependency_id)
+            dependency_queue.extend(MODULE_BY_ID[dependency_id].dependencies)
+        missing_entitlements = sorted(required_entitlements - selected)
+        entitlement_included = module_id in selected
+        dependencies_satisfied = not missing_entitlements
         modules.append({
             "module_id": module.module_id,
             "name": module.name,
             "module_version": module.module_version,
             "status": module.status.value,
-            "included_by_edition_or_addon": module_id in selected,
+            "included_by_edition_or_addon": entitlement_included,
             "dependencies": list(module.dependencies),
-            "can_activate": module.status is ModuleStatus.FOUNDATION,
-            "preview_only": module.status is ModuleStatus.PREVIEW,
+            "missing_dependency_entitlements": missing_entitlements,
+            "dependencies_satisfied": dependencies_satisfied,
+            "implementation_ready": module.status is ModuleStatus.FOUNDATION,
+            "can_activate": entitlement_included and dependencies_satisfied and module.status is ModuleStatus.FOUNDATION,
+            "preview_only": entitlement_included and dependencies_satisfied and module.status is ModuleStatus.PREVIEW,
             "requires_future_release": module.status is ModuleStatus.PLANNED,
         })
     return {
