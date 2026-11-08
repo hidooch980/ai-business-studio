@@ -36,8 +36,8 @@ def test_replenishment_subtracts_reservations_and_adds_confirmed_inbound():
         landed_unit_cost_minor=100,
     )
     assert result.inventory_position == D("60")
-    assert result.suggested_quantity == D("45")
-    assert result.estimated_cost_minor == 4500
+    assert result.suggested_quantity == D("40")
+    assert result.estimated_cost_minor == 4000
     assert result.confidence == "medium"
 
 
@@ -108,3 +108,43 @@ def test_invalid_replenishment_inputs_fail_closed(kwargs):
     values.update(kwargs)
     with pytest.raises(ValueError):
         calculate_replenishment(ReplenishmentInput(**values), 100)
+
+
+
+def test_order_never_exceeds_supplier_capacity_after_pack_rounding():
+    result = calculate_replenishment(
+        ReplenishmentInput(
+            demand_history=[DemandPoint(D("10"))] * 30,
+            sellable_on_hand=D("0"),
+            lead_time_days=2,
+            review_period_days=7,
+            minimum_order_quantity=D("5"),
+            order_multiple=D("5"),
+            supplier_capacity_units=D("62"),
+        ),
+        landed_unit_cost_minor=10,
+    )
+    assert result.suggested_quantity == D("60")
+    assert result.suggested_quantity <= D("62")
+
+
+def test_lead_time_variability_increases_safety_stock():
+    stable = calculate_replenishment(
+        ReplenishmentInput(
+            demand_history=[DemandPoint(D("5")), DemandPoint(D("10"))] * 15,
+            sellable_on_hand=D("0"),
+            lead_time_days=5,
+            lead_time_std_days=D("0"),
+        ),
+        100,
+    )
+    variable = calculate_replenishment(
+        ReplenishmentInput(
+            demand_history=[DemandPoint(D("5")), DemandPoint(D("10"))] * 15,
+            sellable_on_hand=D("0"),
+            lead_time_days=5,
+            lead_time_std_days=D("2"),
+        ),
+        100,
+    )
+    assert variable.safety_stock > stable.safety_stock
