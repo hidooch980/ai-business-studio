@@ -49,15 +49,32 @@ class PostgresDatabase:
         subject_id: str | None = None,
         expected_role: str | None = None,
         expected_branch_ids: frozenset[str] | None = None,
+        session_id: str | None = None,
+        session_token_hash: bytes | None = None,
     ) -> Iterator[TransactionConnection]:
         """Set transaction-local RLS context and revalidate current access state."""
         if not tenant_id or not tenant_id.strip():
             raise ValueError("trusted tenant_id is required")
+        if (session_id is None) != (session_token_hash is None):
+            raise ValueError("session_id and session_token_hash must be supplied together")
         with self.transaction() as connection:
             connection.execute(
                 "SELECT set_config('app.tenant_id', %s, true)",
                 (tenant_id,),
             )
+            if session_id is not None and session_token_hash is not None:
+                session = connection.execute(
+                    """
+                    SELECT id FROM auth_sessions
+                    WHERE id = %s AND tenant_id = %s AND identity_id = %s
+                      AND refresh_token_hash = %s
+                      AND revoked_at IS NULL AND expires_at > statement_timestamp()
+                    FOR SHARE
+                    """,
+                    (session_id, tenant_id, subject_id, session_token_hash),
+                ).fetchone()
+                if session is None:
+                    raise PermissionError("session is inactive or revoked")
             if subject_id is not None:
                 if not subject_id.strip():
                     raise ValueError("subject_id cannot be blank")
@@ -66,17 +83,18 @@ class PostgresDatabase:
                     (subject_id,),
                 )
                 identity = connection.execute(
-                    "SELECT is_active FROM identities WHERE id = %s",
+                    "SELECT is_active FROM identities WHERE id = %s FOR SHARE",
                     (subject_id,),
                 ).fetchone()
                 tenant = connection.execute(
-                    "SELECT status FROM tenants WHERE id = %s",
+                    "SELECT status FROM tenants WHERE id = %s FOR SHARE",
                     (tenant_id,),
                 ).fetchone()
                 membership = connection.execute(
                     """
                     SELECT role FROM tenant_memberships
                     WHERE tenant_id = %s AND identity_id = %s AND status = 'active'
+                    FOR SHARE
                     """,
                     (tenant_id, subject_id),
                 ).fetchone()
@@ -100,6 +118,7 @@ class PostgresDatabase:
                         WHERE bm.tenant_id = %s
                           AND bm.identity_id = %s
                           AND bm.status = 'active'
+                        FOR SHARE OF bm, b
                         """,
                         (tenant_id, subject_id),
                     ).fetchall()
