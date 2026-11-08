@@ -7,7 +7,7 @@ function for locating a session by SHA-256 token hash before tenant context is
 known. The function is `SECURITY DEFINER`, has a fixed search path, returns no
 token hash, and is executable only by the configured runtime role.
 
-The function owner is a NOLOGIN role with BYPASSRLS, but it receives SELECT
+The function owner is a NOLOGIN role without BYPASSRLS, but it receives SELECT
 privileges only on the six required columns of `auth_sessions`; it has no
 privileges on identities, tenants, memberships, finance, procurement, or other
 tables. Runtime is not a member of that owner role and must not be granted
