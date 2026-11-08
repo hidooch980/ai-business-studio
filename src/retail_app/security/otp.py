@@ -11,7 +11,7 @@ import hmac
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -159,7 +159,7 @@ class OTPService:
         rate_limit_keys: tuple[str, ...],
         now: datetime | None = None,
     ) -> OTPReceipt:
-        at = now or datetime.now(timezone.utc)
+        at = now or datetime.now(UTC)
         if at.tzinfo is None:
             raise ValueError("now must be timezone-aware")
         normalized = normalize_identifier(identifier, channel)
