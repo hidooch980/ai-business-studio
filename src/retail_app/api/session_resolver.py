@@ -133,6 +133,8 @@ class PostgresSessionResolver:
                     role=role,
                     branch_ids=branch_ids,
                     active=True,
+                    session_id=session_id,
+                    session_token_hash=token_hash,
                 )
         except HTTPException:
             raise
