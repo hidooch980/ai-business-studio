@@ -2,7 +2,7 @@ import hashlib
 import json
 from datetime import date, datetime, UTC
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints, model_validator
@@ -127,8 +127,6 @@ def create_supplier_invoice(
         raise HTTPException(status_code=404, detail="Supplier or purchase order not found in this tenant")
     if order.supplier_id != supplier.id:
         raise HTTPException(status_code=409, detail="Invoice supplier does not match purchase order supplier")
-    invoice_id = UUID(int=0)
-    from uuid import uuid4
     invoice_id = uuid4()
     invoice = SupplierInvoice(
         id=invoice_id,
