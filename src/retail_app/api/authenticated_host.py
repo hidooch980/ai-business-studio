@@ -1,7 +1,6 @@
 """Explicit FastAPI host mounting for DB-backed procurement authentication."""
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI
