@@ -12,7 +12,7 @@ role direct access to the bootstrap table.
 Before applying migration 0005, provision a dedicated role:
 
 ```sql
-CREATE ROLE auth_bootstrap_owner NOLOGIN NOBYPASSRLS;
+CREATE ROLE auth_bootstrap_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 ```
 
 The migration creates `auth_session_bootstrap`, a minimal lookup table containing
