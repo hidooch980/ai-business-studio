@@ -29,7 +29,7 @@ Implemented in the foundation branch:
 - Identity service primitives for normalized-email registration, credential verification, session creation/lookup/revocation, and tenant-checked role assignment.
 - Database-enforced tenant consistency for membership-role assignments and invitation-role references using composite foreign keys.
 - Case-insensitive unique email index enforced by the database.
-- Versioned Alembic migrations `0001_identity` through `0012_accounting_periods`, including `0009_financial_accounts`, covering identity, CSRF digests, persistent login throttling, append-only audit events, tenant invitations, the financial journal, and product catalog.
+- Versioned Alembic migrations `0001_identity` through `0012_accounting_periods` are in the foundation; migrations `0013` through `0016` are in dependent feature branches and add module catalog/entitlements and procurement-to-stock tables.
 - HTTP authentication endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
 - Tenant-scoped invitation lifecycle: create, list, resend with token rotation, revoke, and one-time acceptance; create/resend actions share a 20-per-hour tenant limit; email delivery remains manual until a provider is configured.
 - Tenant-scoped RBAC APIs for roles, permissions, memberships, and membership-role assignment/removal, with CSRF protection and last-active-owner safeguards.
@@ -41,6 +41,9 @@ Implemented in the foundation branch:
 - Append-only tenant-scoped double-entry journal foundation: integer minor-unit amounts, per-entry debit/credit balancing, idempotency keys, one-time balanced reversals, tenant-scoped journal listing, audit events, SQLite/PostgreSQL mutation and overposting guards, and journal-line links to active tenant chart accounts.
 - Tenant-scoped accounting periods with overlap prevention, open/close lifecycle, audit events, and journal posting-date enforcement against an open period.
 - Tenant-scoped trial balance report by posting date and currency, with debit/credit reconciliation and unmapped-line detection; tenant-scoped general ledger with date filters and running balances.
+- Versioned module catalog with Starter/Growth/Business/Enterprise editions, lifecycle metadata, dependencies and independent module versions; tenant module entitlements are persisted and checked by module-aware API dependencies in feature branches.
+- Smart replenishment preview with demand forecasting inputs, safety stock, supplier quote ranking and transfer suggestions; recommendations remain advisory and require human action.
+- Purchase-to-stock workflow in the current feature branch: supplier registry, purchase orders, explicit approval, partial/full receipts, inventory ledger integration, receipt idempotency, tenant constraints, audit and transactional outbox. This does not yet implement supplier invoice matching or payment execution.
 - Browser session cookies are HttpOnly, SameSite=Lax, configurable Secure, and contain opaque tokens; only token digests are stored.
 - Authenticated users can list their own recent sessions and revoke individual sessions, including the current session; revocation is CSRF-protected and audited.
 - Session-bound CSRF tokens are stored as digests and exposed in a separate readable SameSite=Lax cookie; unsafe authentication requests require a matching `X-CSRF-Token` header and same-host Origin/Referer validation when those headers are present.
@@ -58,9 +61,9 @@ Not implemented and still required before production use:
 - MFA, account recovery, device metadata/fingerprinting, expanded abuse monitoring, and centralized administrator session controls.
 - API-wide IP/account rate limits; invitation create/resend currently has a per-tenant 20-per-hour limit.
 - Independent production security review and additional PostgreSQL concurrency stress tests for role and invitation operations.
-- Complete accounting domain: link journal lines to chart accounts, posting periods, adjustment workflows, reconciliation, tax rules, multi-currency FX handling, and financial reporting.
+- Complete accounting integration: automatic journal posting from purchasing/POS, COGS and inventory valuation reconciliation, payment/bank reconciliation, tax rules, multi-currency FX handling, and financial statements.
 
-- Product categories/unit conversion, batch/expiry tracking, stock valuation, POS, procurement, sales, CRM, notification delivery/worker processes, broader ERP workflows, payment integrations, offline synchronization, AI modules, desktop/mobile packaging.
+- Product variants/categories/unit conversion, batch/expiry tracking, stock valuation, POS and sales-to-cash, full purchase-to-pay (invoice matching/AP/payments/tax/returns), CRM/loyalty, notification provider delivery/worker deployment, broader ERP workflows, payment integrations, complete offline synchronization, AI modules, desktop/mobile packaging.
 
 The API and ledger are incremental foundations, not a production-ready financial or security boundary. The journal API supports one-time compensating reversals but does not yet provide a chart of accounts, posting periods, reconciliation, FX conversion, tax handling, or financial statements. Do not expose it to real customer data or public production traffic until the remaining security and accounting controls are implemented and independently verified. A documented or planned capability is not evidence that it is implemented.
 
