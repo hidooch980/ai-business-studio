@@ -1,3 +1,6 @@
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
 
@@ -55,7 +58,13 @@ def test_tsp_profile_rejects_taxpayer_private_key_references() -> None:
 
 
 def test_connection_response_never_discloses_secret_references() -> None:
+    now = datetime.now(UTC)
     item = MoadianConnection(
+        tenant_id=uuid4(),
+        created_by_user_id=uuid4(),
+        updated_by_user_id=uuid4(),
+        created_at=now,
+        updated_at=now,
         tax_memory_uid="MEMORY_12345",
         taxpayer_identifier="12345678901",
         submission_mode="direct",
