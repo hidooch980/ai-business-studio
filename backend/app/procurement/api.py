@@ -134,6 +134,10 @@ def preview_replenishment(
                 Decimal("1"), rounding=ROUND_HALF_UP
             )
         ),
+            (remaining * (chosen.landed_unit_cost_minor if chosen else 0)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        ),
         "priority_score": str(result.priority_score),
         "confidence": result.confidence,
         "reasons": list(result.reasons),
