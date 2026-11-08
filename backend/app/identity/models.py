@@ -380,7 +380,7 @@ class TenantModuleEntitlement(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+        Uuid, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     module_id: Mapped[str] = mapped_column(String(80), nullable=False)
     source: Mapped[str] = mapped_column(String(16), default="edition", nullable=False)
