@@ -1145,8 +1145,29 @@ def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
     assert _resolve_live(rotated_token).subject_id == str(USER_A)
     logged_out = client.post("/api/v1/auth/logout", headers=headers)
     assert logged_out.status_code == 204
+    assert "max-age=0" in logged_out.headers.get("set-cookie", "").lower()
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as error:
         _resolve_live(rotated_token)
     assert error.value.status_code == 401
+
+def test_30_refresh_and_logout_reject_cross_site_requests():
+    from fastapi.testclient import TestClient
+
+    from retail_app.api.app import create_app
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionService
+
+    database = PostgresDatabase(RUNTIME_URL)
+    issued = SessionService(database).issue(
+        tenant_id=str(TENANT_A), subject_id=str(USER_A)
+    )
+    client = TestClient(create_app(database), base_url="https://testserver")
+    client.cookies.set("__Host-retail_session", issued.refresh_token, domain="testserver", path="/")
+    response = client.post(
+        "/api/v1/auth/refresh",
+        headers={"Origin": "https://attacker.example", "Sec-Fetch-Site": "cross-site"},
+    )
+    assert response.status_code == 403
+    assert _resolve_live(issued.refresh_token).subject_id == str(USER_A)
