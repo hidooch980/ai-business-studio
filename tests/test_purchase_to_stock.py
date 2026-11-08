@@ -15,7 +15,12 @@ from backend.app.db.session import build_engine, get_db_session
 from backend.app.identity.models import AuditEvent
 from backend.app.inventory.models import InventoryMovement
 from backend.app.main import create_app
-from backend.app.procurement.models import ProcurementReceipt, PurchaseOrder
+from backend.app.procurement.models import (
+    ProcurementReceipt,
+    PurchaseOrder,
+    SupplierInvoice,
+    SupplierPayment,
+)
 
 
 @pytest.fixture
@@ -267,3 +272,143 @@ def test_supplier_data_is_isolated_between_tenants(purchasing_client: TestClient
             headers={**tenant_a_headers, "X-Tenant-ID": tenant_b_headers["X-Tenant-ID"]},
         )
         assert forbidden_tenant_switch.status_code == 403
+
+
+
+def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: TestClient) -> None:
+    tenant_id, headers = _register_growth(purchasing_client, "-payables")
+    supplier = purchasing_client.post(
+        "/api/v1/procurement/suppliers",
+        json={"code": "PAY-SUP", "name": "Payables Supplier"},
+        headers=headers,
+    )
+    product = purchasing_client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "PAY-001", "name": "Payables Item", "unit_code": "pcs"},
+        headers=headers,
+    )
+    warehouse = purchasing_client.post(
+        "/api/v1/inventory/warehouses",
+        json={"code": "PAY-WH", "name": "Payables Warehouse"},
+        headers=headers,
+    )
+    assert supplier.status_code == product.status_code == warehouse.status_code == 201
+
+    order = purchasing_client.post(
+        "/api/v1/procurement/purchase-orders",
+        json={
+            "supplier_id": supplier.json()["id"],
+            "warehouse_id": warehouse.json()["id"],
+            "lines": [{
+                "product_id": product.json()["id"],
+                "quantity": 3,
+                "unit_cost_minor": 1250,
+            }],
+        },
+        headers=headers,
+    )
+    assert order.status_code == 201, order.text
+    order_id = order.json()["id"]
+    approved = purchasing_client.post(
+        f"/api/v1/procurement/purchase-orders/{order_id}/approve",
+        headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+    line_id = order.json()["lines"][0]["id"]
+    received = purchasing_client.post(
+        f"/api/v1/procurement/purchase-orders/{order_id}/receipts",
+        json={"lines": [{"purchase_order_line_id": line_id, "quantity": 3}]},
+        headers={**headers, "Idempotency-Key": "payables-receipt-1"},
+    )
+    assert received.status_code == 201, received.text
+
+    invoice = purchasing_client.post(
+        "/api/v1/procurement/payables/invoices",
+        json={
+            "supplier_id": supplier.json()["id"],
+            "purchase_order_id": order_id,
+            "invoice_number": "INV-2026-001",
+            "invoice_date": "2026-11-08",
+            "due_date": "2026-12-08",
+            "currency": "USD",
+            "lines": [{
+                "purchase_order_line_id": line_id,
+                "quantity": 3,
+                "unit_cost_minor": 1250,
+            }],
+        },
+        headers=headers,
+    )
+    assert invoice.status_code == 201, invoice.text
+    invoice_id = invoice.json()["id"]
+
+    matched = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/match",
+        headers=headers,
+    )
+    assert matched.status_code == 200, matched.text
+    assert matched.json()["total_minor"] == 3750
+    assert matched.json()["status"] == "matched"
+
+    approved_invoice = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/approve",
+        headers=headers,
+    )
+    assert approved_invoice.status_code == 200, approved_invoice.text
+    posted = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/post",
+        headers=headers,
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["status"] == "posted"
+
+    first_payment_payload = {
+        "amount_minor": 1000,
+        "currency": "USD",
+        "payment_date": "2026-11-08",
+        "payment_reference": "BANK-TRANSFER-001",
+    }
+    payment_headers = {**headers, "Idempotency-Key": "payables-payment-1"}
+    payment = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+        json=first_payment_payload,
+        headers=payment_headers,
+    )
+    assert payment.status_code == 201, payment.text
+    assert payment.json()["outstanding_minor"] == 2750
+    assert payment.json()["status"] == "partially_paid"
+
+    replay = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+        json=first_payment_payload,
+        headers=payment_headers,
+    )
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["replayed"] is True
+
+    final_payment = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+        json={
+            "amount_minor": 2750,
+            "currency": "USD",
+            "payment_date": "2026-11-08",
+            "payment_reference": "BANK-TRANSFER-002",
+        },
+        headers={**headers, "Idempotency-Key": "payables-payment-2"},
+    )
+    assert final_payment.status_code == 201, final_payment.text
+    assert final_payment.json()["outstanding_minor"] == 0
+    assert final_payment.json()["status"] == "paid"
+
+    with Session(purchasing_client.app.state.test_engine) as db:
+        saved_invoice = db.scalar(
+            select(SupplierInvoice).where(SupplierInvoice.tenant_id == UUID(tenant_id))
+        )
+        payments = db.scalars(
+            select(SupplierPayment).where(SupplierPayment.tenant_id == UUID(tenant_id))
+        ).all()
+        assert saved_invoice is not None
+        assert saved_invoice.total_minor == 3750
+        assert saved_invoice.paid_minor == 3750
+        assert saved_invoice.status == "paid"
+        assert len(payments) == 2
