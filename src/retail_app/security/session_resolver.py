@@ -11,16 +11,11 @@ import hashlib
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Protocol
 
 from fastapi import HTTPException, Request
 
 from retail_app.infrastructure.database import PostgresDatabase
 from retail_app.security.authorization import AccessContext, Role
-
-
-class _Connection(Protocol):
-    def execute(self, query: str, params: tuple[object, ...] | None = None) -> object: ...
 
 
 class SessionResolver:
@@ -55,7 +50,7 @@ class SessionResolver:
         if row is None:
             raise HTTPException(status_code=401, detail="authentication required")
 
-        session_id, tenant_id, identity_id, expires_at, revoked_at = row
+        _, tenant_id, identity_id, expires_at, revoked_at = row
         now = self._clock()
         if now.tzinfo is None:
             raise ValueError("resolver clock must return a timezone-aware datetime")
