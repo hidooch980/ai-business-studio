@@ -160,6 +160,15 @@ def test_expired_and_revoked_sessions_are_rejected(auth_records, mutation):
     with pytest.raises(HTTPException) as error:
         SessionResolver(PostgresDatabase(RUNTIME_URL))(_request(auth_records["token"]))
     assert error.value.status_code == 401
+    with psycopg.connect(DATABASE_URL) as conn:
+        outcome = conn.execute(
+            """
+            SELECT outcome FROM auth_session_lookup_audit
+            WHERE session_id = %s ORDER BY occurred_at DESC LIMIT 1
+            """,
+            (auth_records["session_id"],),
+        ).fetchone()
+    assert outcome == (mutation,)
 
 
 def test_revoked_membership_is_rejected_immediately(auth_records):
