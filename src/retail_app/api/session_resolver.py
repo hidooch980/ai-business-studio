@@ -11,7 +11,6 @@ from fastapi import HTTPException, Request
 
 from retail_app.security.authorization import AccessContext, Role
 
-
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{32,512}$")
 
 
