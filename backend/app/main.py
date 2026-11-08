@@ -10,8 +10,8 @@ from backend.app.finance.reports_api import router as finance_reports_router
 from backend.app.identity.access_api import router as access_router
 from backend.app.identity.api import router as auth_router
 from backend.app.identity.invitation_api import router as invitation_router
-from backend.app.modules.api import router as modules_router
 from backend.app.inventory.api import router as inventory_router
+from backend.app.modules.api import router as modules_router
 from backend.app.procurement.api import router as procurement_router
 from backend.app.version import PRODUCT_VERSION
 
