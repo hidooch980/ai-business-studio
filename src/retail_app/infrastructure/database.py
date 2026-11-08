@@ -91,8 +91,15 @@ class PostgresDatabase:
                 if expected_branch_ids is not None and expected_role in {"branch_manager", "employee"}:
                     rows = connection.execute(
                         """
-                        SELECT branch_id FROM branch_memberships
-                        WHERE tenant_id = %s AND identity_id = %s AND status = 'active'
+                        SELECT bm.branch_id
+                        FROM branch_memberships AS bm
+                        JOIN branches AS b
+                          ON b.tenant_id = bm.tenant_id
+                         AND b.id = bm.branch_id
+                         AND b.status = 'active'
+                        WHERE bm.tenant_id = %s
+                          AND bm.identity_id = %s
+                          AND bm.status = 'active'
                         """,
                         (tenant_id, subject_id),
                     ).fetchall()
