@@ -3,6 +3,7 @@ import subprocess
 import sys
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from uuid import UUID, uuid4
 
 import pytest
@@ -393,6 +394,32 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
     assert invoice.status_code == 201, invoice.text
     invoice_id = invoice.json()["id"]
 
+    # A second tenant must neither list nor operate on this tenant's invoice.
+    with TestClient(purchasing_client.app) as tenant_b_client:
+        tenant_b_client.headers.update({"Origin": str(tenant_b_client.base_url).rstrip("/")})
+        _, tenant_b_headers = _register_growth(tenant_b_client, "-payables-isolation")
+        tenant_b_invoices = tenant_b_client.get(
+            "/api/v1/procurement/payables/invoices", headers=tenant_b_headers
+        )
+        assert tenant_b_invoices.status_code == 200, tenant_b_invoices.text
+        assert tenant_b_invoices.json()["items"] == []
+        foreign_match = tenant_b_client.post(
+            f"/api/v1/procurement/payables/invoices/{invoice_id}/match",
+            headers=tenant_b_headers,
+        )
+        assert foreign_match.status_code == 404
+        foreign_payment = tenant_b_client.post(
+            f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+            json={
+                "amount_minor": 1,
+                "currency": "USD",
+                "payment_date": "2026-11-08",
+                "payment_reference": "FOREIGN-TENANT-ATTEMPT",
+            },
+            headers={**tenant_b_headers, "Idempotency-Key": "foreign-tenant-payment"},
+        )
+        assert foreign_payment.status_code == 404
+
     matched = purchasing_client.post(
         f"/api/v1/procurement/payables/invoices/{invoice_id}/match",
         headers=headers,
@@ -445,6 +472,24 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
     assert replay.json()["replayed"] is True
     assert replay.json()["journal_entry_id"] == payment.json()["journal_entry_id"]
 
+    conflicting_replay = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+        json={**first_payment_payload, "amount_minor": 999},
+        headers=payment_headers,
+    )
+    assert conflicting_replay.status_code == 409
+    overpayment = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+        json={
+            "amount_minor": 2751,
+            "currency": "USD",
+            "payment_date": "2026-11-08",
+            "payment_reference": "OVERPAYMENT-ATTEMPT",
+        },
+        headers={**headers, "Idempotency-Key": "payables-overpayment-attempt"},
+    )
+    assert overpayment.status_code == 409
+
     final_payment = purchasing_client.post(
         f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
         json={
@@ -487,6 +532,79 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         )).all()
         assert sum(line.debit_minor for line in payable_debits) == 3_750
         assert sum(line.credit_minor for line in payable_credits) == 3_750
+        account_totals: dict[str, tuple[int, int]] = {}
+        for line in db.scalars(
+            select(JournalLine).where(JournalLine.tenant_id == UUID(tenant_id))
+        ).all():
+            debit, credit = account_totals.get(line.account_code, (0, 0))
+            account_totals[line.account_code] = (
+                debit + line.debit_minor,
+                credit + line.credit_minor,
+            )
+        assert account_totals["1400"] == (3_750, 0)  # Inventory asset
+        assert account_totals["1490"] == (3_750, 3_750)  # GRNI cleared by invoice
+        assert account_totals["2100"] == (3_750, 3_750)  # AP fully settled
+        assert account_totals["1000"] == (0, 3_750)  # Cash/bank credit
+    # A closed financial period must reject a supplier payment atomically.
+    with Session(purchasing_client.app.state.test_engine) as db:
+        original_invoice = db.scalar(
+            select(SupplierInvoice).where(
+                SupplierInvoice.tenant_id == UUID(tenant_id),
+                SupplierInvoice.id == UUID(invoice_id),
+            )
+        )
+        assert original_invoice is not None
+        blocked_invoice = SupplierInvoice(
+            tenant_id=UUID(tenant_id),
+            supplier_id=UUID(supplier.json()["id"]),
+            purchase_order_id=UUID(order_id),
+            invoice_number="INV-CLOSED-PERIOD",
+            invoice_date=date(2026, 11, 8),
+            due_date=date(2026, 12, 8),
+            currency="USD",
+            total_minor=1000,
+            paid_minor=0,
+            status="posted",
+            created_by_user_id=original_invoice.created_by_user_id,
+        )
+        db.add(blocked_invoice)
+        db.commit()
+        blocked_invoice_id = blocked_invoice.id
+
+    periods = purchasing_client.get("/api/v1/finance/periods", headers=headers)
+    assert periods.status_code == 200, periods.text
+    period_id = periods.json()["items"][0]["id"]
+    closed = purchasing_client.post(f"/api/v1/finance/periods/{period_id}/close", headers=headers)
+    assert closed.status_code == 200, closed.text
+    blocked_payment = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{blocked_invoice_id}/payments",
+        json={
+            "amount_minor": 1000,
+            "currency": "USD",
+            "payment_date": "2026-11-08",
+            "payment_reference": "CLOSED-PERIOD-ATTEMPT",
+        },
+        headers={**headers, "Idempotency-Key": "closed-period-payment"},
+    )
+    assert blocked_payment.status_code == 409, blocked_payment.text
+    with Session(purchasing_client.app.state.test_engine) as db:
+        unchanged_invoice = db.get(SupplierInvoice, blocked_invoice_id)
+        assert unchanged_invoice is not None
+        assert unchanged_invoice.paid_minor == 0
+        assert unchanged_invoice.status == "posted"
+        assert db.scalar(
+            select(SupplierPayment.id).where(
+                SupplierPayment.tenant_id == UUID(tenant_id),
+                SupplierPayment.idempotency_key == "closed-period-payment",
+            )
+        ) is None
+        assert db.scalar(
+            select(JournalEntry.id).where(
+                JournalEntry.tenant_id == UUID(tenant_id),
+                JournalEntry.description == "Supplier payment CLOSED-PERIOD-ATTEMPT",
+            )
+        ) is None
+
     new_cash_account = purchasing_client.post(
         "/api/v1/finance/accounts",
         json={"code": "1010", "name": "Replacement Bank", "account_type": "asset"},
@@ -776,3 +894,36 @@ def test_postgres_prevents_concurrent_supplier_overpayment(
         assert saved_invoice.paid_minor == 800
         assert len(payments) == 2
         assert len(journals) == 2
+
+
+def test_moadian_connection_profiles_are_tenant_scoped(purchasing_client: TestClient) -> None:
+    _, tenant_a_headers = _register_growth(purchasing_client, "-moadian-a")
+    configured = purchasing_client.put(
+        "/api/v1/tax/moadian/connections",
+        json={
+            "tax_memory_uid": "MEMORY_SHARED_001",
+            "taxpayer_identifier": "12345678901",
+            "submission_mode": "tsp",
+            "provider_code": "licensed-tsp",
+            "environment": "sandbox",
+            "provider_credential_secret_ref": "secret://tenant-a/moadian/tsp-token",
+            "is_enabled": True,
+        },
+        headers=tenant_a_headers,
+    )
+    assert configured.status_code == 200, configured.text
+    connection_id = configured.json()["id"]
+    assert configured.json()["credentials_configured"] is True
+    assert "secret://" not in str(configured.json())
+
+    with TestClient(purchasing_client.app) as tenant_b_client:
+        tenant_b_client.headers.update({"Origin": str(tenant_b_client.base_url).rstrip("/")})
+        _, tenant_b_headers = _register_growth(tenant_b_client, "-moadian-b")
+        visible = tenant_b_client.get("/api/v1/tax/moadian/connections", headers=tenant_b_headers)
+        assert visible.status_code == 200, visible.text
+        assert visible.json()["items"] == []
+        foreign_disable = tenant_b_client.post(
+            f"/api/v1/tax/moadian/connections/{connection_id}/disable",
+            headers=tenant_b_headers,
+        )
+        assert foreign_disable.status_code == 404
