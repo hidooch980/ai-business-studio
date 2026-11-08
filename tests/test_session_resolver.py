@@ -229,10 +229,12 @@ def test_lookup_owner_has_only_session_table_read_scope():
                 has_table_privilege('auth_session_lookup_owner', 'public.identities', 'SELECT'),
                 has_table_privilege('auth_session_lookup_owner', 'public.tenants', 'SELECT'),
                 has_table_privilege('auth_session_lookup_owner', 'public.auth_session_lookup_audit', 'INSERT'),
-                pg_has_role('retail_session_runtime', 'auth_session_lookup_owner', 'MEMBER')
+                pg_has_role('retail_session_runtime', 'auth_session_lookup_owner', 'MEMBER'),
+                (SELECT rolbypassrls FROM pg_roles WHERE rolname = 'auth_session_lookup_owner'),
+                (SELECT rolcanlogin FROM pg_roles WHERE rolname = 'auth_session_lookup_owner')
             """
         ).fetchone()
-    assert privileges == (True, False, False, True, False)
+    assert privileges == (True, False, False, True, False, False, False)
 
 def test_session_lookup_audit_records_outcome_without_token_hash(auth_records):
     SessionResolver(PostgresDatabase(RUNTIME_URL))(_request(auth_records["token"]))
