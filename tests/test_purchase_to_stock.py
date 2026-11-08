@@ -730,3 +730,49 @@ def test_postgres_prevents_concurrent_supplier_overpayment(
         assert len(payments) == 1
         assert len(journals) == 1
         assert journals[0].debit_total_minor == journals[0].credit_total_minor == 700
+
+    # Same idempotency key sent concurrently must create exactly one payment
+    # and return the same persisted payment/journal to both callers.
+    def retry_same_payment() -> tuple[int, bool, str | None]:
+        response = client.post(
+            f"/api/v1/procurement/payables/invoices/{invoice_id}/payments",
+            json={
+                "amount_minor": 100,
+                "currency": "USD",
+                "payment_date": "2026-11-08",
+                "payment_reference": "same-key-retry",
+            },
+            headers={**headers, "Idempotency-Key": "payment-race-same-key"},
+        )
+        body = response.json()
+        return response.status_code, body.get("replayed", False), body.get("journal_entry_id")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        same_key_results = list(pool.map(lambda _: retry_same_payment(), range(2)))
+    assert [item[0] for item in same_key_results] == [201, 201]
+    assert sum(item[1] for item in same_key_results) == 1
+    assert same_key_results[0][2] == same_key_results[1][2]
+
+    with Session(client.app.state.test_engine) as db:
+        saved_invoice = db.scalar(
+            select(SupplierInvoice).where(
+                SupplierInvoice.tenant_id == UUID(tenant_id),
+                SupplierInvoice.id == UUID(invoice_id),
+            )
+        )
+        payments = db.scalars(
+            select(SupplierPayment).where(
+                SupplierPayment.tenant_id == UUID(tenant_id),
+                SupplierPayment.supplier_invoice_id == UUID(invoice_id),
+            )
+        ).all()
+        journals = db.scalars(
+            select(JournalEntry).where(
+                JournalEntry.tenant_id == UUID(tenant_id),
+                JournalEntry.description.like("Supplier payment %"),
+            )
+        ).all()
+        assert saved_invoice is not None
+        assert saved_invoice.paid_minor == 800
+        assert len(payments) == 2
+        assert len(journals) == 2
