@@ -286,3 +286,37 @@ def test_membership_denial_is_written_to_tenant_security_audit(auth_records):
             (auth_records["tenant_id"], auth_records["subject_id"]),
         ).fetchone()
     assert event == ("auth.session.denied", "denied", auth_records["subject_id"])
+
+
+def _unsafe_request(token: str, csrf_cookie: str | None, csrf_header: str | None) -> Request:
+    headers = [(b"cookie", f"__Host-retail_session={token}".encode())]
+    if csrf_cookie is not None:
+        headers[0] = (
+            b"cookie",
+            f"__Host-retail_session={token}; __Host-retail_csrf={csrf_cookie}".encode(),
+        )
+    if csrf_header is not None:
+        headers.append((b"x-csrf-token", csrf_header.encode()))
+    return Request({
+        "type": "http", "method": "POST", "path": "/api/procurement/suppliers",
+        "headers": headers, "query_string": b"", "server": ("testserver", 443),
+        "client": ("127.0.0.1", 12345), "scheme": "https",
+    })
+
+
+def test_unsafe_request_requires_session_bound_csrf_token(auth_records):
+    from fastapi import HTTPException
+
+    resolver = SessionResolver(PostgresDatabase(RUNTIME_URL))
+    with pytest.raises(HTTPException) as missing:
+        resolver(_unsafe_request(auth_records["token"], None, None))
+    assert missing.value.status_code == 403
+
+    with pytest.raises(HTTPException) as mismatch:
+        resolver(_unsafe_request(auth_records["token"], "wrong", "wrong"))
+    assert mismatch.value.status_code == 403
+
+    context = resolver(_unsafe_request(
+        auth_records["token"], auth_records["csrf_token"], auth_records["csrf_token"]
+    ))
+    assert context.subject_id == str(auth_records["subject_id"])
