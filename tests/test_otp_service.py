@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hmac
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -10,9 +10,7 @@ from retail_app.security.otp import (
     OTPChannel,
     OTPChallenge,
     OTPConfig,
-    OTPDeliveryProvider,
     OTPPurpose,
-    OTPRateLimiter,
     OTPRejected,
     OTPService,
     OTPUnavailable,
@@ -90,7 +88,7 @@ def test_otp_is_six_digit_csprng_output_and_plaintext_not_in_receipt(service):
 
 def test_expired_challenge_is_rejected(service):
     svc, _, _, delivery = service
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     receipt = svc.request_code(
         "+12025550101", OTPChannel.SMS, OTPPurpose.LOGIN,
         rate_limit_keys=("ip:test",), now=now,
