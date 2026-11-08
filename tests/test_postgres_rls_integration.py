@@ -882,6 +882,8 @@ def test_20_role_change_between_resolution_and_business_transaction_is_denied():
             subject_id=context.subject_id,
             expected_role=context.role.value,
             expected_branch_ids=context.branch_ids,
+            session_id=context.session_id,
+            session_token_hash=context.session_token_hash,
         ):
             pass
     finally:
@@ -908,6 +910,8 @@ def test_21_real_postgres_cross_tenant_and_branch_revocation_are_denied():
             subject_id=context.subject_id,
             expected_role=context.role.value,
             expected_branch_ids=context.branch_ids,
+            session_id=context.session_id,
+            session_token_hash=context.session_token_hash,
         ) as connection:
             assert connection.execute("SELECT id FROM tenants WHERE id = %s", (TENANT_B,)).fetchall() == []
 
@@ -929,6 +933,8 @@ def test_21_real_postgres_cross_tenant_and_branch_revocation_are_denied():
             subject_id=branch_context.subject_id,
             expected_role=branch_context.role.value,
             expected_branch_ids=branch_context.branch_ids,
+            session_id=branch_context.session_id,
+            session_token_hash=branch_context.session_token_hash,
         ):
             pass
     finally:
@@ -967,6 +973,8 @@ def test_22_real_postgres_resolver_denies_inactive_branch_even_with_active_membe
             subject_id=context.subject_id,
             expected_role=context.role.value,
             expected_branch_ids=frozenset({str(BRANCH_A)}),
+            session_id=context.session_id,
+            session_token_hash=context.session_token_hash,
         ):
             pass
     finally:
@@ -977,4 +985,29 @@ def test_22_real_postgres_resolver_denies_inactive_branch_even_with_active_membe
                 "WHERE tenant_id = %s AND identity_id = %s",
                 (TENANT_A, USER_A),
             )
+            admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
+
+def test_23_session_revocation_between_resolution_and_transaction_is_denied():
+    from secrets import token_urlsafe
+
+    from retail_app.infrastructure.database import PostgresDatabase
+
+    token = token_urlsafe(48)
+    session_id = _live_session(token)
+    database = PostgresDatabase(RUNTIME_URL)
+    try:
+        context = _resolve_live(token)
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+            admin.execute("UPDATE auth_sessions SET revoked_at = now() WHERE id = %s", (session_id,))
+        with pytest.raises(PermissionError, match="session is inactive or revoked"), database.tenant_transaction(
+            tenant_id=context.tenant_id,
+            subject_id=context.subject_id,
+            expected_role=context.role.value,
+            expected_branch_ids=context.branch_ids,
+            session_id=context.session_id,
+            session_token_hash=context.session_token_hash,
+        ):
+            pass
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
             admin.execute("DELETE FROM auth_sessions WHERE id = %s", (session_id,))
