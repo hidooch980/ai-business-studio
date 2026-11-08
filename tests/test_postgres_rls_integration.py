@@ -146,7 +146,7 @@ def test_1_migration_applies_and_forces_rls_on_all_scoped_tables():
             )
             """
         ).fetchall()
-    assert len(rows) == 14
+    assert len(rows) == 15
     assert all(forced for _, forced in rows)
 
 
@@ -299,7 +299,7 @@ def test_10_domain_events_and_business_audit_are_append_only(runtime):
             """,
             (event_id, TENANT_A, uuid4()),
         )
-        with pytest.raises(psycopg.errors.RaiseException):
+        with pytest.raises(psycopg.errors.RaiseException), runtime.transaction():
             runtime.execute(
                 "UPDATE domain_events SET event_type = 'supplier.changed' WHERE id = %s",
                 (event_id,),
