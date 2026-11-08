@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Mapping
+from collections.abc import Mapping
 
 
 class ModuleStatus(StrEnum):
@@ -195,10 +195,7 @@ def resolve_edition(edition: Edition | str, addons: tuple[str, ...] = ()) -> dic
         "edition": selected_edition.value,
         "edition_name": definition.name,
         "modules": modules,
-        "notice": (
-            "Catalog metadata is not an authorization grant. Enforce persisted tenant entitlements",
-            "feature flags and RBAC on every server-side operation.",
-        ),
+        "notice": "Catalog metadata is not an authorization grant. Enforce persisted tenant entitlements, feature flags and RBAC on every server-side operation.",
     }
 
 
