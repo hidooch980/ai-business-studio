@@ -66,3 +66,21 @@ These are CI results only. They do not establish that staging browser tests, mob
 - No deployment or production activation is authorized.
 - PR #24 remains open and Draft; do not merge it.
 - OTP public login remains disabled until implementation, independent review and staging acceptance are complete.
+
+
+## 2026-11-08 follow-up: session management API
+
+The branch now also contains:
+- `GET /api/v1/auth/sessions`: authenticated session inventory for the current subject, bounded to 50 unexpired rows.
+- `DELETE /api/v1/auth/sessions/{session_id}`: subject- and tenant-scoped revocation; current session is revalidated inside the same transaction; same-origin is required; successful revocation is audited.
+- Unit and HTTP route tests for subject scoping, audit insertion, same-origin rejection and route composition.
+
+The API implementation is not considered accepted until the CI run for the latest branch head completes successfully and the route behavior is verified in disposable staging.
+
+### Still blocked on external configuration / environments
+
+- OTP provider delivery cannot be production-complete until a real SMS/email provider, verified sender, secret manager entries, spend limits and delivery monitoring are configured. Automated tests must continue to use a fake provider; never expose test codes in production.
+- Logout-all must remain unavailable over HTTP until purpose-bound step-up verification is implemented and tested. The internal service method alone is not sufficient authorization.
+- Browser/service-worker update acceptance and real mobile-device testing require an independently deployed staging environment and an actual browser/device session.
+- Runtime PostgreSQL grants and role attributes must be verified against the exact staging deployment role; CI verifies an ephemeral PostgreSQL 16 fixture only.
+- Independent security review, privacy/legal review and production operations/alerting are release gates, not code-only tasks.
