@@ -1,6 +1,6 @@
 # PostgreSQL Identity and Security Schema
 
-Status: migration authored and statically checked in CI; it has **not** been applied to a live database. No database credentials or PostgreSQL service are connected to this repository workflow.
+Status: migration is exercised in CI against an ephemeral PostgreSQL 16 service by seven RLS integration checks. It has **not** been applied to a live/customer database.
 
 ## Migration
 
@@ -16,7 +16,7 @@ RLS is defense in depth, not a replacement for service authorization. Branch-sco
 
 ## Important integration caveats
 
-- The migration must be reviewed and exercised against the actual PostgreSQL major version before production.
+- CI applies the migration to an ephemeral PostgreSQL 16 database and runs seven integration checks. This validates the CI target version, not the production database or deployment environment.
 - `identities` is global and deliberately uses a self-or-tenant-membership policy rather than a tenant_id column.
 - The OTP fingerprint and code HMAC require separate, high-entropy server-side peppers from a secret manager.
 - Rate limiting by IP/device/global provider spend belongs in a dedicated service or shared limiter, not only in this schema.
@@ -27,8 +27,8 @@ RLS is defense in depth, not a replacement for service authorization. Branch-sco
 ## Rollout checks
 
 1. Create separate migration-owner and runtime roles; verify runtime role has no ownership, SUPERUSER or BYPASSRLS.
-2. Apply migration in a disposable PostgreSQL environment and run cross-tenant, cross-branch and cross-user RLS tests.
-3. Verify missing transaction context returns no rows and cannot insert scoped rows.
+2. Review the PostgreSQL 16 CI results; repeat the migration and cross-tenant, cross-branch and cross-user checks on the intended production PostgreSQL major version.
+3. Verify missing transaction context returns no rows and cannot insert scoped rows; anonymous OTP challenges additionally require the trusted transaction-local `app.otp_onboarding=true` flag.
 4. Test connection-pool reuse to prove transaction-local settings are cleared.
 5. Add least-privilege grants, backup/restore and migration rollback procedures.
 6. Only then connect the FastAPI identity/session repositories and OTP provider.

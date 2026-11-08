@@ -42,7 +42,7 @@ CREATE TABLE tenant_memberships (
     role text NOT NULL CHECK (role IN ('owner_admin', 'branch_manager', 'employee', 'customer')),
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('invited', 'active', 'suspended', 'revoked')),
     created_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (tenant_id, identity_id),
+    PRIMARY KEY (tenant_id, identity_id)
 );
 CREATE INDEX tenant_memberships_identity_idx ON tenant_memberships(identity_id, status);
 
@@ -134,6 +134,19 @@ BEGIN
     END LOOP;
 END
 $migration$;
+
+-- Anonymous login challenges are permitted only inside an explicit, trusted
+-- onboarding transaction. Ordinary requests cannot enumerate or create them.
+DROP POLICY tenant_isolation ON otp_challenges;
+CREATE POLICY otp_challenge_scope ON otp_challenges
+USING (
+    tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid
+    OR (tenant_id IS NULL AND current_setting('app.otp_onboarding', true) = 'true')
+)
+WITH CHECK (
+    tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid
+    OR (tenant_id IS NULL AND current_setting('app.otp_onboarding', true) = 'true')
+);
 
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
