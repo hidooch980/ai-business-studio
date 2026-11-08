@@ -166,8 +166,7 @@ GRANT SELECT (csrf_token_hash)
 
 -- Replace the initial resolver with a narrowly-scoped variant that also
 -- returns the stored CSRF digest. Runtime still cannot SELECT auth_sessions.
-DROP FUNCTION public.resolve_auth_session(bytea);
-CREATE FUNCTION public.resolve_auth_session(p_token_sha256 bytea)
+CREATE FUNCTION public.resolve_auth_session_with_csrf(p_token_sha256 bytea)
 RETURNS TABLE (
     session_id uuid,
     tenant_id uuid,
@@ -222,16 +221,16 @@ BEGIN
 END
 $function$;
 
-ALTER FUNCTION public.resolve_auth_session(bytea) OWNER TO auth_session_lookup_owner;
-REVOKE ALL ON FUNCTION public.resolve_auth_session(bytea) FROM PUBLIC;
+ALTER FUNCTION public.resolve_auth_session_with_csrf(bytea) OWNER TO auth_session_lookup_owner;
+REVOKE ALL ON FUNCTION public.resolve_auth_session_with_csrf(bytea) FROM PUBLIC;
 
 DO $resolver_grant$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'retail_runtime') THEN
-        GRANT EXECUTE ON FUNCTION public.resolve_auth_session(bytea) TO retail_runtime;
+        GRANT EXECUTE ON FUNCTION public.resolve_auth_session_with_csrf(bytea) TO retail_runtime;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'retail_session_runtime') THEN
-        GRANT EXECUTE ON FUNCTION public.resolve_auth_session(bytea) TO retail_session_runtime;
+        GRANT EXECUTE ON FUNCTION public.resolve_auth_session_with_csrf(bytea) TO retail_session_runtime;
     END IF;
 END
 $resolver_grant$;
