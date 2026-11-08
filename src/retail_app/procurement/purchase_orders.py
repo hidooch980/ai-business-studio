@@ -49,13 +49,16 @@ class PurchaseOrder:
     currency: str
     order_date: date
     lines: tuple[PurchaseOrderLine, ...]
+    order_number: str
     status: PurchaseOrderStatus = PurchaseOrderStatus.DRAFT
 
     def __post_init__(self) -> None:
         if not all(value.strip() for value in (self.id, self.tenant_id, self.branch_id, self.supplier_id)):
             raise ValueError("purchase order identifiers are required")
-        if len(self.currency) != 3 or not self.currency.isalpha():
+        if len(self.currency) != 3 or not self.currency.isalpha() or not self.currency.isupper():
             raise ValueError("currency must be a three-letter code")
+        if not 1 <= len(self.order_number.strip()) <= 64:
+            raise ValueError("order_number must contain 1 to 64 characters")
         if not self.lines:
             raise ValueError("purchase order requires at least one line")
         numbers = [line.line_number for line in self.lines]
