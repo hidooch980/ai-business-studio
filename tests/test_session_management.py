@@ -36,6 +36,8 @@ class Connection:
         self.calls.append((query, params))
         if "UPDATE auth_sessions" in query:
             return Result(one=(UUID(TARGET),) if self.updated else None, rowcount=1 if self.updated else 0)
+        if "SELECT id, created_at, last_seen_at, expires_at" in query:
+            return Result(rows=self.rows)
         return Result()
 
 
@@ -48,12 +50,6 @@ class Database:
     def tenant_transaction(self, **kwargs):
         self.context = kwargs
         yield self.connection
-
-
-def _context(database, *, rows=(), updated=True):
-    connection = Connection(rows=rows, updated=updated)
-    database.connection = connection
-    return connection
 
 
 def test_list_sessions_is_scoped_to_revalidated_current_identity():
