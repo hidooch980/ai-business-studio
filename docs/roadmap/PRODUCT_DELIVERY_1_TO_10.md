@@ -2,7 +2,7 @@
 
 This roadmap is an execution ledger. A stage is not complete because it is described here; it is complete only when its code, migration, regression tests, CI evidence, and operational evidence exist on the same commit.
 
-## 1. Stabilize the foundation
+## 0. Product editions and modular versioning\n\nStatus: **Policy and initial catalog implemented; tenant entitlement enforcement remains**\n\n- [x] Define Starter, Growth, Business and Enterprise packaging targets with independently licensable add-ons.\n- [x] Add module catalog with stable IDs, independent SemVer, dependency graph and lifecycle states.\n- [x] Add edition/add-on resolution and validation tests; planned modules fail closed.\n- [ ] Persist tenant entitlements and enforce them on API routes, jobs and integrations.\n- [ ] Implement safe module enable/disable, compatibility checks and upgrade planner.\n- [ ] Add release channels, signed module manifests, usage metering and commercial billing policy.\n\nDetails: `docs/architecture/PRODUCT_EDITION_AND_MODULE_VERSIONING.md`. Catalog metadata is not runtime licensing or production activation.\n\nExit gate: tenant-isolated entitlement tests, safe enable/disable, migration/restore rehearsal and signed release evidence.\n\n## 1. Stabilize the foundation
 
 Status: **In progress**
 

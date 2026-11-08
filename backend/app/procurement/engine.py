@@ -144,7 +144,10 @@ def calculate_replenishment(data: ReplenishmentInput, landed_unit_cost_minor: in
             raise ValueError("budget cannot be negative")
         if landed_unit_cost_minor > 0:
             affordable = D(data.budget_minor) / D(landed_unit_cost_minor)
-            quantity = min(quantity, (affordable / data.order_multiple).to_integral_value(rounding="ROUND_FLOOR") * data.order_multiple)
+            affordable_quantity = (
+                affordable / data.order_multiple
+            ).to_integral_value(rounding="ROUND_FLOOR") * data.order_multiple
+            quantity = min(quantity, affordable_quantity)
         elif data.budget_minor == 0:
             quantity = D("0")
     estimated_cost = int((quantity * landed_unit_cost_minor).quantize(D('1'), rounding=ROUND_HALF_UP))
