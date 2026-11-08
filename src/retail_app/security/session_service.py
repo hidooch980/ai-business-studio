@@ -25,7 +25,18 @@ class IssuedSession:
     expires_at: datetime
 
 
+def _valid_token(token: str) -> bool:
+    return (
+        isinstance(token, str)
+        and 32 <= len(token) <= 512
+        and token.isascii()
+        and all(character.isalnum() or character in "_-" for character in token)
+    )
+
+
 def _digest(token: str) -> bytes:
+    if not _valid_token(token):
+        raise SessionAuthenticationError("invalid session")
     return hashlib.sha256(token.encode("ascii")).digest()
 
 
@@ -71,7 +82,7 @@ class SessionService:
 
     def rotate(self, token: str) -> IssuedSession:
         """Atomically consume one token and issue its successor; reuse revokes its family."""
-        if not token or len(token) > 512:
+        if not _valid_token(token):
             raise SessionAuthenticationError("invalid session")
         presented_hash = _digest(token)
         new_token = secrets.token_urlsafe(48)
@@ -154,7 +165,7 @@ class SessionService:
 
     def revoke(self, token: str) -> bool:
         """Revoke the presented session; unknown tokens are a harmless no-op."""
-        if not token or len(token) > 512:
+        if not _valid_token(token):
             return False
         digest = _digest(token)
         with self.database.transaction() as connection:
