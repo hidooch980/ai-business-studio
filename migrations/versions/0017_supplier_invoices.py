@@ -13,16 +13,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "purchase_order_lines",
-        sa.Column("quantity_invoiced", sa.BigInteger(), nullable=False, server_default=sa.text("0")),
-    )
-    op.create_check_constraint(
-        "ck_purchase_order_lines_invoiced_range",
-        "purchase_order_lines",
-        "quantity_invoiced >= 0 AND quantity_invoiced <= quantity_received",
-    )
-    op.alter_column("purchase_order_lines", "quantity_invoiced", server_default=None)
+    with op.batch_alter_table("purchase_order_lines") as batch_op:
+        batch_op.add_column(
+            sa.Column("quantity_invoiced", sa.BigInteger(), nullable=False, server_default=sa.text("0"))
+        )
+        batch_op.create_check_constraint(
+            "ck_purchase_order_lines_invoiced_range",
+            "quantity_invoiced >= 0 AND quantity_invoiced <= quantity_received",
+        )
+        batch_op.alter_column("quantity_invoiced", server_default=None)
 
     op.create_table(
         "supplier_invoices",
@@ -126,9 +125,6 @@ def downgrade() -> None:
     op.drop_table("supplier_invoice_lines")
     op.drop_index("ix_supplier_invoices_tenant_status_date", table_name="supplier_invoices")
     op.drop_table("supplier_invoices")
-    op.drop_constraint(
-        "ck_purchase_order_lines_invoiced_range",
-        "purchase_order_lines",
-        type_="check",
-    )
-    op.drop_column("purchase_order_lines", "quantity_invoiced")
+    with op.batch_alter_table("purchase_order_lines") as batch_op:
+        batch_op.drop_constraint("ck_purchase_order_lines_invoiced_range", type_="check")
+        batch_op.drop_column("quantity_invoiced")
