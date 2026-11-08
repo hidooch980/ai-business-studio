@@ -3,8 +3,8 @@
 Revision ID: 0016_purchase_to_stock
 Revises: 0015_tenant_module_entitlements
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0016_purchase_to_stock"
 down_revision = "0015_tenant_module_entitlements"
@@ -100,7 +100,11 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint("length(trim(idempotency_key)) > 0", name="ck_procurement_receipts_idempotency_nonempty"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["tenant_id", "purchase_order_id"], ["purchase_orders.tenant_id", "purchase_orders.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "purchase_order_id"],
+            ["purchase_orders.tenant_id", "purchase_orders.id"],
+            ondelete="RESTRICT",
+        ),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "idempotency_key", name="uq_procurement_receipts_tenant_idempotency"),
