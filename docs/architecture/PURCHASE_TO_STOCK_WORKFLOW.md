@@ -2,6 +2,8 @@
 
 Status: **Implemented in feature branch; CI and review pending**
 
+This workflow is delivered as an additive module over the versioned tenant-entitlement foundation.
+
 ## Lifecycle
 
 `supplier -> purchase order draft -> authorized approval -> partial/full goods receipt -> immutable inventory movements -> updated on-hand balance`
