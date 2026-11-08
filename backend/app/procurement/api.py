@@ -424,8 +424,18 @@ def receive_purchase_order(
                 description=f"Goods received for {order.order_number}"[:500],
                 posting_date=datetime.now(UTC).date(),
                 lines=[
-                    {"account_code": accounting.inventory_account_code, "memo": "Inventory received", "debit_minor": receipt_total_minor, "credit_minor": 0},
-                    {"account_code": accounting.grni_account_code, "memo": "Goods received not invoiced", "debit_minor": 0, "credit_minor": receipt_total_minor},
+                    {
+                        "account_code": accounting.inventory_account_code,
+                        "memo": "Inventory received",
+                        "debit_minor": receipt_total_minor,
+                        "credit_minor": 0,
+                    },
+                    {
+                        "account_code": accounting.grni_account_code,
+                        "memo": "Goods received not invoiced",
+                        "debit_minor": 0,
+                        "credit_minor": receipt_total_minor,
+                    },
                 ],
                 commit=False,
             )
