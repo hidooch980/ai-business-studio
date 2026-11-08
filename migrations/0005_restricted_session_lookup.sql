@@ -12,6 +12,7 @@ END
 $role$;
 
 GRANT USAGE ON SCHEMA public TO auth_session_lookup_owner;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM auth_session_lookup_owner;
 GRANT CREATE ON SCHEMA public TO auth_session_lookup_owner;
 GRANT SELECT (id, tenant_id, identity_id, refresh_token_hash, expires_at, revoked_at)
     ON TABLE public.auth_sessions TO auth_session_lookup_owner;
