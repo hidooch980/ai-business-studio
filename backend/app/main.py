@@ -11,6 +11,7 @@ from backend.app.identity.access_api import router as access_router
 from backend.app.identity.api import router as auth_router
 from backend.app.identity.invitation_api import router as invitation_router
 from backend.app.inventory.api import router as inventory_router
+from backend.app.moadian.api import router as moadian_router
 from backend.app.modules.api import router as modules_router
 from backend.app.procurement.accounting_api import router as procurement_accounting_router
 from backend.app.procurement.api import router as procurement_router
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     application.include_router(procurement_router, prefix="/api/v1")
     application.include_router(payables_router, prefix="/api/v1")
     application.include_router(procurement_accounting_router, prefix="/api/v1")
+    application.include_router(moadian_router, prefix="/api/v1")
     return application
 
 
