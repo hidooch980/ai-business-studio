@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from datetime import date
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID, uuid4
@@ -531,6 +532,66 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         )).all()
         assert sum(line.debit_minor for line in payable_debits) == 3_750
         assert sum(line.credit_minor for line in payable_credits) == 3_750
+    # A closed financial period must reject a supplier payment atomically.
+    with Session(purchasing_client.app.state.test_engine) as db:
+        original_invoice = db.scalar(
+            select(SupplierInvoice).where(
+                SupplierInvoice.tenant_id == UUID(tenant_id),
+                SupplierInvoice.id == UUID(invoice_id),
+            )
+        )
+        assert original_invoice is not None
+        blocked_invoice = SupplierInvoice(
+            tenant_id=UUID(tenant_id),
+            supplier_id=UUID(supplier.json()["id"]),
+            purchase_order_id=UUID(order_id),
+            invoice_number="INV-CLOSED-PERIOD",
+            invoice_date=date(2026, 11, 8),
+            due_date=date(2026, 12, 8),
+            currency="USD",
+            total_minor=1000,
+            paid_minor=0,
+            status="posted",
+            created_by_user_id=original_invoice.created_by_user_id,
+        )
+        db.add(blocked_invoice)
+        db.commit()
+        blocked_invoice_id = blocked_invoice.id
+
+    periods = purchasing_client.get("/api/v1/finance/periods", headers=headers)
+    assert periods.status_code == 200, periods.text
+    period_id = periods.json()["items"][0]["id"]
+    closed = purchasing_client.post(f"/api/v1/finance/periods/{period_id}/close", headers=headers)
+    assert closed.status_code == 200, closed.text
+    blocked_payment = purchasing_client.post(
+        f"/api/v1/procurement/payables/invoices/{blocked_invoice_id}/payments",
+        json={
+            "amount_minor": 1000,
+            "currency": "USD",
+            "payment_date": "2026-11-08",
+            "payment_reference": "CLOSED-PERIOD-ATTEMPT",
+        },
+        headers={**headers, "Idempotency-Key": "closed-period-payment"},
+    )
+    assert blocked_payment.status_code == 409, blocked_payment.text
+    with Session(purchasing_client.app.state.test_engine) as db:
+        unchanged_invoice = db.get(SupplierInvoice, blocked_invoice_id)
+        assert unchanged_invoice is not None
+        assert unchanged_invoice.paid_minor == 0
+        assert unchanged_invoice.status == "posted"
+        assert db.scalar(
+            select(SupplierPayment.id).where(
+                SupplierPayment.tenant_id == UUID(tenant_id),
+                SupplierPayment.idempotency_key == "closed-period-payment",
+            )
+        ) is None
+        assert db.scalar(
+            select(JournalEntry.id).where(
+                JournalEntry.tenant_id == UUID(tenant_id),
+                JournalEntry.idempotency_key == f"supplier-payment:{blocked_invoice_id}",
+            )
+        ) is None
+
     new_cash_account = purchasing_client.post(
         "/api/v1/finance/accounts",
         json={"code": "1010", "name": "Replacement Bank", "account_type": "asset"},
