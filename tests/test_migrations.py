@@ -30,7 +30,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
         with engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "0018_proc_acct"
+                == "0019_moadian"
             )
         with engine.begin() as connection:
             connection.execute(
@@ -88,6 +88,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "supplier_invoice_lines",
             "supplier_payments",
             "procurement_accounting_settings",
+            "moadian_connections",
         }.issubset(tables)
         assert "posting_date" in {column["name"] for column in inspect(engine).get_columns("journal_entries")}
         assert "financial_account_id" in {column["name"] for column in inspect(engine).get_columns("journal_lines")}
