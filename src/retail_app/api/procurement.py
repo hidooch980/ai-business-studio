@@ -242,9 +242,9 @@ def create_procurement_router(database: object, context_dependency: Callable[...
 
     @router.get("/inventory/stock")
     def inventory_stock(
-        context: AccessContext = Depends(context_dependency),
         branch_id: str,
         item_id: str,
+        context: AccessContext = Depends(context_dependency),
     ):
         return _run(lambda: chain.get_stock_balance(
             database, context, branch_id=branch_id, item_id=item_id
