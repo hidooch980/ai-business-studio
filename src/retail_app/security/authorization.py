@@ -52,6 +52,8 @@ class AccessContext:
     role: Role
     branch_ids: frozenset[str] = frozenset()
     active: bool = True
+    session_id: str | None = None
+    session_token_hash: bytes | None = None
 
 
 @dataclass(frozen=True, slots=True)
