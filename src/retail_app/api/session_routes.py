@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -38,7 +38,7 @@ def create_session_router(
 
     @router.get("/sessions")
     def list_sessions(
-        context: Annotated[AccessContext, Depends(context_dependency)],
+        context: AccessContext = Depends(context_dependency),
     ) -> list[dict[str, object]]:
         if context.session_id is None or context.session_token_hash is None:
             raise HTTPException(status_code=401, detail="authentication required")
