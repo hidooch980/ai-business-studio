@@ -11,6 +11,7 @@ import hashlib
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from fastapi import HTTPException, Request
 
@@ -57,6 +58,9 @@ class SessionResolver:
         if revoked_at is not None or expires_at <= now:
             raise HTTPException(status_code=401, detail="authentication required")
 
+        membership_denied = False
+        branch_ids: frozenset[str] = frozenset()
+        role: Role | None = None
         with self._database.tenant_transaction(
             tenant_id=str(tenant_id), subject_id=str(identity_id)
         ) as connection:
@@ -75,32 +79,52 @@ class SessionResolver:
                 (identity_id, tenant_id),
             ).fetchone()
             if membership is None or not membership[0] or membership[1] != "active":
-                raise HTTPException(status_code=401, detail="authentication required")
+                membership_denied = True
+                connection.execute(
+                    """
+                    INSERT INTO public.security_audit_events
+                        (id, tenant_id, actor_identity_id, event_type, outcome, subject_identity_id)
+                    VALUES (%s, %s, %s, 'auth.session.denied', 'denied', %s)
+                    """,
+                    (uuid4(), tenant_id, identity_id, identity_id),
+                )
+            else:
+                try:
+                    role = Role(membership[2])
+                except ValueError as exc:
+                    raise HTTPException(status_code=403, detail="unsupported membership role") from exc
 
-            try:
-                role = Role(membership[2])
-            except ValueError as exc:
-                raise HTTPException(status_code=403, detail="unsupported membership role") from exc
+                branches = connection.execute(
+                    """
+                    SELECT bm.branch_id
+                    FROM public.branch_memberships AS bm
+                    JOIN public.branches AS b
+                      ON b.tenant_id = bm.tenant_id AND b.id = bm.branch_id
+                    WHERE bm.tenant_id = %s
+                      AND bm.identity_id = %s
+                      AND bm.status = 'active'
+                      AND b.status = 'active'
+                    ORDER BY bm.branch_id
+                    """,
+                    (tenant_id, identity_id),
+                ).fetchall()
+                branch_ids = frozenset(str(branch[0]) for branch in branches)
+                connection.execute(
+                    """
+                    INSERT INTO public.security_audit_events
+                        (id, tenant_id, actor_identity_id, event_type, outcome, subject_identity_id)
+                    VALUES (%s, %s, %s, 'auth.session.resolved', 'success', %s)
+                    """,
+                    (uuid4(), tenant_id, identity_id, identity_id),
+                )
 
-            branches = connection.execute(
-                """
-                SELECT bm.branch_id
-                FROM public.branch_memberships AS bm
-                JOIN public.branches AS b
-                  ON b.tenant_id = bm.tenant_id AND b.id = bm.branch_id
-                WHERE bm.tenant_id = %s
-                  AND bm.identity_id = %s
-                  AND bm.status = 'active'
-                  AND b.status = 'active'
-                ORDER BY bm.branch_id
-                """,
-                (tenant_id, identity_id),
-            ).fetchall()
+        if membership_denied:
+            raise HTTPException(status_code=401, detail="authentication required")
 
         return AccessContext(
             subject_id=str(identity_id),
             tenant_id=str(tenant_id),
-            role=role,
-            branch_ids=frozenset(str(branch[0]) for branch in branches),
+            role=role or Role.EMPLOYEE,
+            branch_ids=branch_ids,
             active=True,
         )
