@@ -1141,5 +1141,8 @@ def test_29_refresh_and_logout_http_endpoints_rotate_and_clear_secure_cookie():
     assert _resolve_live(rotated_token).subject_id == str(USER_A)
     logged_out = client.post("/api/v1/auth/logout", headers=headers)
     assert logged_out.status_code == 204
-    with pytest.raises(Exception):
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as error:
         _resolve_live(rotated_token)
+    assert error.value.status_code == 401
