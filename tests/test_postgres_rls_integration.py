@@ -1255,3 +1255,28 @@ def test_32_security_audit_reads_are_restricted_to_tenant_owner_admin(runtime):
             "SELECT count(*) FROM security_audit_events WHERE tenant_id = %s",
             (TENANT_A,),
         ).fetchone()[0] >= 1
+
+def test_33_expired_refresh_token_is_denied_and_audited_using_database_time():
+    from retail_app.infrastructure.database import PostgresDatabase
+    from retail_app.security.session_service import SessionAuthenticationError, SessionService
+
+    service = SessionService(PostgresDatabase(RUNTIME_URL))
+    issued = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        admin.execute(
+            "UPDATE auth_sessions SET expires_at = clock_timestamp() - interval '1 second' WHERE id = %s",
+            (issued.session_id,),
+        )
+    with pytest.raises(SessionAuthenticationError):
+        service.rotate(issued.refresh_token)
+    with psycopg.connect(DATABASE_URL) as admin:
+        assert admin.execute(
+            "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE id = %s",
+            (issued.session_id,),
+        ).fetchone()[0] is True
+        assert admin.execute(
+            """SELECT count(*) FROM security_audit_events
+               WHERE event_type = 'session.refresh_expired'
+                 AND metadata->>'session_id' = %s""",
+            (issued.session_id,),
+        ).fetchone()[0] == 1
