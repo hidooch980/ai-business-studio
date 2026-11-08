@@ -112,10 +112,16 @@ class PostgresSessionResolver:
 
                 branches = connection.execute(
                     """
-                    SELECT branch_id
-                    FROM branch_memberships
-                    WHERE tenant_id = %s AND identity_id = %s AND status = 'active'
-                    ORDER BY branch_id
+                    SELECT bm.branch_id
+                    FROM branch_memberships AS bm
+                    JOIN branches AS b
+                      ON b.tenant_id = bm.tenant_id
+                     AND b.id = bm.branch_id
+                     AND b.status = 'active'
+                    WHERE bm.tenant_id = %s
+                      AND bm.identity_id = %s
+                      AND bm.status = 'active'
+                    ORDER BY bm.branch_id
                     """,
                     (tenant_id, subject_id),
                 ).fetchall()
