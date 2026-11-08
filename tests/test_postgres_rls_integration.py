@@ -1264,10 +1264,12 @@ def test_33_expired_refresh_token_is_denied_and_audited_using_database_time():
     issued = service.issue(tenant_id=str(TENANT_A), subject_id=str(USER_A))
     with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
         admin.execute(
-            "UPDATE auth_sessions
+            """
+            UPDATE auth_sessions
                SET created_at = clock_timestamp() - interval '2 seconds',
                    expires_at = clock_timestamp() - interval '1 second'
-               WHERE id = %s",
+               WHERE id = %s
+            """,
             (issued.session_id,),
         )
     with pytest.raises(SessionAuthenticationError):
