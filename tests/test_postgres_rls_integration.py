@@ -53,6 +53,7 @@ def postgres_schema():
             "0004_receipts_invoices_payments.sql",
             "0005_session_bootstrap_rls.sql",
             "0006_refresh_token_families.sql",
+            "0007_security_audit_immutability.sql",
         ]
         conn.execute("GRANT USAGE ON SCHEMA public TO retail_runtime")
         conn.execute(
@@ -1032,6 +1033,28 @@ def test_24_session_service_issues_and_rotates_single_use_refresh_tokens():
         _resolve_live(issued.refresh_token)
     assert error.value.status_code == 401
     assert service.revoke(rotated.refresh_token) is True
+    with psycopg.connect(DATABASE_URL) as admin:
+        assert admin.execute(
+            """SELECT count(*) FROM security_audit_events
+               WHERE tenant_id = %s AND subject_identity_id = %s
+                 AND event_type = 'session.issued'
+                 AND metadata->>'session_id' = %s""",
+            (TENANT_A, USER_A, issued.session_id),
+        ).fetchone()[0] == 1
+        assert admin.execute(
+            """SELECT count(*) FROM security_audit_events
+               WHERE tenant_id = %s AND subject_identity_id = %s
+                 AND event_type = 'session.refresh_rotated'
+                 AND metadata->>'new_session_id' = %s""",
+            (TENANT_A, USER_A, rotated.session_id),
+        ).fetchone()[0] == 1
+        assert admin.execute(
+            """SELECT count(*) FROM security_audit_events
+               WHERE tenant_id = %s AND subject_identity_id = %s
+                 AND event_type = 'session.revoked'
+                 AND metadata->>'session_id' = %s""",
+            (TENANT_A, USER_A, rotated.session_id),
+        ).fetchone()[0] == 1
     with pytest.raises(HTTPException):
         _resolve_live(rotated.refresh_token)
 
@@ -1174,3 +1197,22 @@ def test_30_refresh_and_logout_reject_cross_site_requests():
     )
     assert response.status_code == 403
     assert _resolve_live(issued.refresh_token).subject_id == str(USER_A)
+
+def test_31_security_audit_events_are_append_only():
+    import psycopg
+
+    event_id = UUID("aaaaaaaa-9001-4000-8000-000000000001")
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        admin.execute(
+            """INSERT INTO security_audit_events
+               (id, tenant_id, actor_identity_id, event_type, outcome, subject_identity_id)
+               VALUES (%s, %s, %s, 'test.immutability', 'success', %s)""",
+            (event_id, TENANT_A, USER_A, USER_A),
+        )
+        with pytest.raises(psycopg.Error):
+            admin.execute(
+                "UPDATE security_audit_events SET outcome = 'denied' WHERE id = %s",
+                (event_id,),
+            )
+        with pytest.raises(psycopg.Error):
+            admin.execute("DELETE FROM security_audit_events WHERE id = %s", (event_id,))
