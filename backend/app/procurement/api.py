@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 
 from backend.app.catalog.models import Product
 from backend.app.db.session import get_db_session
-from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_module
 from backend.app.finance.ledger import AccountingPeriodConflictError, JournalConflictError, create_journal_entry
+from backend.app.identity.api_dependencies import TenantPrincipal, require_csrf_protection, require_module
 from backend.app.identity.models import AuditEvent
 from backend.app.inventory.models import InventoryBalance, InventoryMovement, Warehouse
 from backend.app.outbox.service import enqueue_outbox_event
