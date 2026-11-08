@@ -739,14 +739,14 @@ def test_16_bootstrap_owner_and_runtime_have_no_bypassrls(runtime):
     with runtime.transaction():
         rows = runtime.execute(
             """
-            SELECT rolname, rolsuper, rolbypassrls
+            SELECT rolname, rolcanlogin, rolsuper, rolbypassrls
             FROM pg_roles WHERE rolname IN ('auth_bootstrap_owner', 'retail_runtime')
             ORDER BY rolname
             """
         ).fetchall()
         assert rows == [
-            ("auth_bootstrap_owner", False, False),
-            ("retail_runtime", False, False),
+            ("auth_bootstrap_owner", False, False, False),
+            ("retail_runtime", True, False, False),
         ]
 
 
