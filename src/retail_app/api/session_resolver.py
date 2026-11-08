@@ -1,4 +1,5 @@
 """Resolve an opaque browser session into a DB-backed, deny-by-default context."""
+
 from __future__ import annotations
 
 import hashlib
