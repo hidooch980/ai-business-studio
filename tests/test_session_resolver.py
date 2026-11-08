@@ -3,12 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from uuid import UUID
 
-from fastapi import HTTPException
 import pytest
+from fastapi import HTTPException
 
 from retail_app.api.session_resolver import PostgresSessionResolver, SessionCookieSettings
 from retail_app.security.authorization import Role
-
 
 TENANT = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 SUBJECT = UUID("aaaaaaaa-1001-4000-8000-000000000001")
