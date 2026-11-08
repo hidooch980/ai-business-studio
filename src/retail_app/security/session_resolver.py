@@ -8,6 +8,7 @@ transaction under the ordinary runtime role.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import re
 from uuid import uuid4
 
@@ -47,7 +48,8 @@ class SessionResolver:
         if row is None:
             raise HTTPException(status_code=401, detail="authentication required")
 
-        _, tenant_id, identity_id = row
+        session_id, tenant_id, identity_id = row
+        request.state.session_id = str(session_id)
 
         membership_denied = False
         branch_ids: frozenset[str] = frozenset()
@@ -55,6 +57,28 @@ class SessionResolver:
         with self._database.tenant_transaction(
             tenant_id=str(tenant_id), subject_id=str(identity_id)
         ) as connection:
+            if request.method.upper() not in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+                csrf_cookie = request.cookies.get("__Host-retail_csrf", "")
+                csrf_header = request.headers.get("X-CSRF-Token", "")
+                csrf_row = connection.execute(
+                    """
+                    SELECT csrf_token_hash FROM public.auth_sessions
+                    WHERE id = %s AND tenant_id = %s AND identity_id = %s
+                      AND revoked_at IS NULL AND expires_at > clock_timestamp()
+                    """,
+                    (session_id, tenant_id, identity_id),
+                ).fetchone()
+                supplied_hash = hashlib.sha256(csrf_header.encode("utf-8")).digest()
+                if (
+                    not csrf_cookie
+                    or not csrf_header
+                    or not hmac.compare_digest(csrf_cookie, csrf_header)
+                    or csrf_row is None
+                    or csrf_row[0] is None
+                    or not hmac.compare_digest(bytes(csrf_row[0]), supplied_hash)
+                ):
+                    raise HTTPException(status_code=403, detail="CSRF validation failed")
+
             membership = connection.execute(
                 """
                 SELECT i.is_active, t.status, tm.role
