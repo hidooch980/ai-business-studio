@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
 
