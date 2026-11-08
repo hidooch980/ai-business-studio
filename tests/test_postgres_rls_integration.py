@@ -729,7 +729,6 @@ def test_17_otp_challenge_is_rate_limited_and_consumed_atomically(runtime):
 
 def test_18_complete_otp_login_session_rotation_and_logout():
     import hashlib
-    from uuid import uuid4
 
     from retail_app.infrastructure.database import PostgresDatabase
     from retail_app.security.auth_service import AuthService, OTPDelivery
@@ -760,10 +759,11 @@ def test_18_complete_otp_login_session_rotation_and_logout():
     )
     old_hash = hashlib.sha256(raw_token.encode()).digest()
     with psycopg.connect(DATABASE_URL) as conn:
-        old_session_id = conn.execute(
-            "SELECT id FROM auth_sessions WHERE refresh_token_hash = %s",
+        old_session_id, stored_csrf_hash = conn.execute(
+            "SELECT id, csrf_token_hash FROM auth_sessions WHERE refresh_token_hash = %s",
             (old_hash,),
-        ).fetchone()[0]
+        ).fetchone()
+    assert stored_csrf_hash == hashlib.sha256(csrf_token.encode()).digest()
 
     actor = AccessContext(str(USER_A), str(TENANT_A), Role.OWNER_ADMIN)
     rotated_token, rotated_csrf = service.rotate_session(actor, str(old_session_id))
@@ -777,10 +777,11 @@ def test_18_complete_otp_login_session_rotation_and_logout():
             "SELECT id FROM auth_sessions WHERE refresh_token_hash = %s",
             (rotated_hash,),
         ).fetchone()[0]
-        parent_id = conn.execute(
-            "SELECT rotated_from_session_id FROM auth_sessions WHERE id = %s",
+        parent_id, rotated_csrf_hash = conn.execute(
+            "SELECT rotated_from_session_id, csrf_token_hash FROM auth_sessions WHERE id = %s",
             (new_session_id,),
-        ).fetchone()[0]
+        ).fetchone()
+    assert rotated_csrf_hash == hashlib.sha256(rotated_csrf.encode()).digest()
     assert old_revoked is True
     assert parent_id == old_session_id
 
