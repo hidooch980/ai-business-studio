@@ -17,5 +17,9 @@ def create_app(database: Any, *, title: str = "AI Smart Retail API") -> FastAPI:
     """
     app = FastAPI(title=title)
     mount_authenticated_procurement_routes(app, database)
-    app.include_router(create_session_router(database))
+    app.include_router(
+        create_session_router(
+            database, context_dependency=app.state.session_resolver
+        )
+    )
     return app
