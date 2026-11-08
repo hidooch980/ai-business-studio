@@ -28,7 +28,7 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
     try:
         tables = set(inspect(engine).get_table_names())
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0013_login_rate_limit_retention"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0015_tenant_module_entitlements"
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -75,6 +75,8 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path) -> None:
             "financial_accounts",
             "outbox_events",
             "financial_periods",
+            "tenant_subscriptions",
+            "tenant_module_entitlements",
         }.issubset(tables)
         assert "posting_date" in {column["name"] for column in inspect(engine).get_columns("journal_entries")}
         assert "financial_account_id" in {column["name"] for column in inspect(engine).get_columns("journal_lines")}

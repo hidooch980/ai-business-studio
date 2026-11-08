@@ -1,11 +1,11 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, StringConstraints
 
-from backend.app.identity.api_dependencies import TenantPrincipal, require_permission
+from backend.app.identity.api_dependencies import TenantPrincipal, require_module
 from backend.app.procurement.engine import (
     DemandPoint,
     ReplenishmentInput,
@@ -70,7 +70,7 @@ class ProcurementPreviewRequest(BaseModel):
 @router.post("/preview")
 def preview_replenishment(
     payload: ProcurementPreviewRequest,
-    _principal: TenantPrincipal = Depends(require_permission("procurement.read")),
+    _principal: TenantPrincipal = Depends(require_module("procurement", "procurement.read")),
 ) -> dict:
     ranked = rank_supplier_quotes([
         SupplierQuote(**quote.model_dump()) for quote in payload.suppliers
@@ -129,7 +129,11 @@ def preview_replenishment(
         "suggested_purchase_quantity": str(remaining),
         "suggested_transfer_quantity": str(result.suggested_quantity - remaining),
         "selected_supplier_id": chosen.supplier_id if chosen else None,
-        "estimated_cost_minor": int((remaining * (chosen.landed_unit_cost_minor if chosen else 0)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)),
+        "estimated_cost_minor": int(
+            (remaining * (chosen.landed_unit_cost_minor if chosen else 0)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        ),
         "priority_score": str(result.priority_score),
         "confidence": result.confidence,
         "reasons": list(result.reasons),

@@ -62,6 +62,15 @@ def test_procurement_preview_is_tenant_authorized_and_never_creates_a_purchase_o
     )
     assert registered.status_code == 201, registered.text
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    upgrade = procurement_client.put(
+        "/api/v1/modules/edition",
+        json={"edition": "growth"},
+        headers={
+            "X-Tenant-ID": tenant_id,
+            "X-CSRF-Token": procurement_client.cookies.get("abs_csrf"),
+        },
+    )
+    assert upgrade.status_code == 200, upgrade.text
     payload = {
         "product_id": "b8d1d61d-00a1-4a0e-9b7b-3f9c1f7e2a10",
         "warehouse_id": "1cfd4e88-89e0-45a8-a6c2-55db2f7c1c01",
@@ -127,6 +136,15 @@ def test_procurement_preview_rejects_invalid_order_multiple(procurement_client: 
     )
     assert registered.status_code == 201
     tenant_id = registered.json()["memberships"][0]["tenant_id"]
+    upgrade = procurement_client.put(
+        "/api/v1/modules/edition",
+        json={"edition": "growth"},
+        headers={
+            "X-Tenant-ID": tenant_id,
+            "X-CSRF-Token": procurement_client.cookies.get("abs_csrf"),
+        },
+    )
+    assert upgrade.status_code == 200, upgrade.text
     response = procurement_client.post(
         "/api/v1/procurement/preview",
         json={

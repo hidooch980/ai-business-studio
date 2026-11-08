@@ -10,9 +10,17 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_db_session
 from backend.app.identity.authorization import membership_has_permission
-from backend.app.identity.models import Membership, Tenant, User, UserSession
+from backend.app.identity.models import (
+    Membership,
+    Tenant,
+    TenantModuleEntitlement,
+    TenantSubscription,
+    User,
+    UserSession,
+)
 from backend.app.identity.security import verify_csrf_token
 from backend.app.identity.service import get_active_session
+from backend.app.modules.registry import MODULE_BY_ID, ModuleStatus
 
 
 @dataclass(frozen=True)
@@ -153,3 +161,59 @@ def require_csrf_protection(
         or not verify_csrf_token(header_token, session.csrf_token_hash)
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+
+
+
+def require_module(module_id: str, permission_code: str):
+    """Require tenant RBAC permission and an enabled, dependency-satisfied module."""
+    definition = MODULE_BY_ID.get(module_id)
+    if definition is None:
+        raise ValueError("Unknown module ID")
+    if not permission_code or permission_code.strip() != permission_code:
+        raise ValueError("permission_code must be a non-empty normalized string")
+
+    def dependency(
+        tenant_principal: TenantPrincipal = Depends(get_tenant_principal),
+        db: Session = Depends(get_db_session),
+    ) -> TenantPrincipal:
+        if not membership_has_permission(db, tenant_principal.membership, permission_code):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+        if definition.status is ModuleStatus.PLANNED:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Module is not released")
+        subscription_active = db.scalar(
+            select(TenantSubscription.id).where(
+                TenantSubscription.tenant_id == tenant_principal.tenant.id,
+                TenantSubscription.status == "active",
+            )
+        )
+        if subscription_active is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant subscription is not active",
+            )
+        required = {module_id}
+        pending = list(definition.dependencies)
+        while pending:
+            dependency_id = pending.pop()
+            if dependency_id in required:
+                continue
+            required.add(dependency_id)
+            pending.extend(MODULE_BY_ID[dependency_id].dependencies)
+        enabled = set(
+            db.scalars(
+                select(TenantModuleEntitlement.module_id).where(
+                    TenantModuleEntitlement.tenant_id == tenant_principal.tenant.id,
+                    TenantModuleEntitlement.is_entitled.is_(True),
+                    TenantModuleEntitlement.is_enabled.is_(True),
+                    TenantModuleEntitlement.module_id.in_(required),
+                )
+            ).all()
+        )
+        if enabled != required:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Module is not enabled or a required module is unavailable",
+            )
+        return tenant_principal
+
+    return dependency

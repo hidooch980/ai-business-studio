@@ -1,6 +1,6 @@
 """Add smart procurement permission codes.
 
-Revision ID: 0014_smart_procurement_permissions
+Revision ID: 0014_procurement_perms
 Revises: 0013_login_rate_limit_retention
 """
 from uuid import uuid4
@@ -8,7 +8,7 @@ from uuid import uuid4
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0014_smart_procurement_permissions"
+revision = "0014_procurement_perms"
 down_revision = "0013_login_rate_limit_retention"
 branch_labels = None
 depends_on = None
