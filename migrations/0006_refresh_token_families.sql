@@ -12,6 +12,8 @@ WHERE token_family_id IS NULL;
 ALTER TABLE auth_sessions
     ALTER COLUMN token_family_id SET NOT NULL;
 
+ALTER TABLE auth_sessions ALTER COLUMN token_family_id SET DEFAULT gen_random_uuid();
+
 CREATE INDEX auth_sessions_family_idx
     ON auth_sessions(token_family_id);
 
