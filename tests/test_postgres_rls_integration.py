@@ -718,6 +718,7 @@ def test_14_session_bootstrap_lookup_is_narrow_and_runtime_cannot_read_table(run
 
 def test_15_session_bootstrap_rejects_expired_and_revoked_sessions(runtime):
     with runtime.transaction():
+        set_context(runtime, TENANT_A, USER_A)
         runtime.execute(
             "UPDATE auth_sessions SET expires_at = now() - interval '1 second' WHERE id = %s",
             (SESSION_A,),
