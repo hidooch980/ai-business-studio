@@ -3,8 +3,8 @@
 Revision ID: 0016_purchase_to_stock
 Revises: 0015_tenant_module_entitlements
 """
-import sqlalchemy as sa
 from alembic import op
+import sqlalchemy as sa
 
 revision = "0016_purchase_to_stock"
 down_revision = "0015_tenant_module_entitlements"
