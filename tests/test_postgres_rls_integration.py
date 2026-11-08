@@ -705,7 +705,7 @@ def test_16_short_and_rejected_delivery_only_adds_accepted_quantity_to_stock(run
 
 def test_14_session_bootstrap_lookup_is_narrow_and_runtime_cannot_read_table(runtime):
     with runtime.transaction():
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), runtime.transaction():
             runtime.execute("SELECT count(*) FROM auth_session_bootstrap")
         row = runtime.execute(
             """
@@ -720,7 +720,7 @@ def test_15_session_bootstrap_rejects_expired_and_revoked_sessions(runtime):
     with runtime.transaction():
         set_context(runtime, TENANT_A, USER_A)
         runtime.execute(
-            "UPDATE auth_sessions SET expires_at = now() - interval '1 second' WHERE id = %s",
+            "UPDATE auth_sessions SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = %s",
             (SESSION_A,),
         )
         assert runtime.execute(
@@ -760,8 +760,8 @@ def _live_session(token: str, *, expires: str = "1 day", revoked: bool = False):
         admin.execute(
             """
             INSERT INTO auth_sessions
-                (id, tenant_id, identity_id, refresh_token_hash, expires_at, revoked_at)
-            VALUES (%s, %s, %s, %s, now() + %s::interval,
+                (id, tenant_id, identity_id, refresh_token_hash, created_at, expires_at, revoked_at)
+            VALUES (%s, %s, %s, %s, now() - interval '2 days', now() + %s::interval,
                     CASE WHEN %s THEN now() ELSE NULL END)
             """,
             (session_id, TENANT_A, USER_A, token_hash, expires, revoked),
