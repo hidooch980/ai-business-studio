@@ -25,9 +25,12 @@ REVOKE auth_bootstrap_owner FROM db_migrator;
 The migration creates `auth_session_bootstrap`, a minimal lookup table containing
 only the token digest, session/tenant/identity identifiers, expiry and revocation
 state. A SECURITY DEFINER trigger function mirrors session insert/update/delete
-inside the same transaction. A second SECURITY DEFINER function accepts the
-server-computed token digest and returns identifiers only for an unexpired,
-non-revoked session.
+inside the same transaction. Migration `0006_refresh_token_families.sql` changes
+the lookup function to return identifiers for a matching digest even when that
+session is expired or revoked. This is intentional: the application must identify
+reuse of a rotated/revoked token and revoke its entire token family. The bootstrap
+lookup is never authorization; every caller must re-read the authoritative
+`auth_sessions` row under RLS and check its expiry/revocation state before access.
 
 Both functions are owned by `auth_bootstrap_owner`, which is NOLOGIN and
 NOBYPASSRLS. Its only elevated capability is ownership/privileges on this narrow
@@ -49,7 +52,8 @@ before rollout; do not grant to PUBLIC.
    Store and compare only the digest; never log the raw cookie.
 3. In a short transaction, call
    `SELECT tenant_id, identity_id, session_id FROM resolve_auth_session_bootstrap(%s)`.
-   No row means invalid, expired or revoked session. This function does not
+   No row means the digest is unknown. A returned row may be expired or revoked
+   and is only a locator for the authoritative row. This function does not
    establish authorization and returns no role or branch information.
 4. In the same transaction, set `app.tenant_id` and `app.subject_id` with
    transaction-local `set_config(..., true)` using only the returned UUIDs.
@@ -78,6 +82,8 @@ before rollout; do not grant to PUBLIC.
   arbitrary session metadata.
 - The trigger mirror is transactionally consistent with `auth_sessions`.
   Reconcile it periodically and fail closed if lookup and authoritative row differ.
+  The migration-0006 lookup deliberately retains revoked/expired digests for
+  replay detection; never use bootstrap results as an authorization decision.
 - A missing row, DB error, malformed cookie, inactive identity, revoked membership
   or ambiguous lookup must deny access.
 - Use TLS, secure cookie flags, bounded cookie size, token rotation and secret
@@ -130,13 +136,14 @@ bootstrap table or bypass RLS. The migration must run only in ephemeral CI.
   employees, compares the active branch set again. A membership/role/branch
   change between dependency resolution and the business transaction fails
   closed. RLS settings are transaction-local and connection-per-transaction.
-- Cookie issuance, refresh rotation, logout/revocation endpoints, CSRF policy
-  for non-idempotent browser writes, and a complete standalone FastAPI app
-  lifecycle are not implemented by this resolver change. The host adapter
-  mounts the existing procurement routes only. A session issuer must generate
-  cryptographically random URL-safe tokens and set Secure, HttpOnly,
-  SameSite=Strict, Path=/ cookie attributes; the resolver never creates or
-  returns a cookie.
+- `SessionService` now provides internal session issuance after a trusted
+  authentication proof, atomic refresh rotation, token-family replay revocation,
+  current-session revocation and revoke-all primitives. The FastAPI host exposes
+  same-origin `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout` routes
+  using a Secure, HttpOnly, SameSite=Strict `__Host-` cookie. The resolver itself
+  still never creates or returns a cookie. Public OTP challenge/verification,
+  provider delivery, login, logout-all/session inventory routes, idle timeout,
+  session audit events and production rate limiting remain incomplete.
 - The default `__Host-` cookie name requires HTTPS and Secure. Local HTTP
   development must use a separately configured non-Host cookie name and must
   never be enabled in production.
