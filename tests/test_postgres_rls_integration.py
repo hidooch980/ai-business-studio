@@ -48,6 +48,7 @@ def postgres_schema():
             "0002_transactional_infrastructure.sql",
             "0003_suppliers_purchase_orders.sql",
             "0004_receipts_invoices_payments.sql",
+            "0005_restricted_session_lookup.sql",
         ]
         conn.execute("GRANT USAGE ON SCHEMA public TO retail_runtime")
         conn.execute(
