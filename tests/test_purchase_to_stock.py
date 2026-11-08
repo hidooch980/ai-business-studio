@@ -52,15 +52,15 @@ def purchasing_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[Te
         get_settings.cache_clear()
 
 
-def _register_growth(client: TestClient) -> tuple[str, dict[str, str]]:
+def _register_growth(client: TestClient, suffix: str = "") -> tuple[str, dict[str, str]]:
     response = client.post(
         "/api/v1/auth/register",
         json={
-            "email": "purchase-owner@example.test",
+            "email": f"purchase-owner{suffix}@example.test",
             "password": "correct horse battery staple",
             "display_name": "Purchase Owner",
-            "tenant_name": "Purchase Studio",
-            "tenant_slug": "purchase-studio",
+            "tenant_name": f"Purchase Studio{suffix}",
+            "tenant_slug": f"purchase-studio{suffix or '-main'}",
         },
     )
     assert response.status_code == 201, response.text
@@ -224,3 +224,33 @@ def test_purchase_order_cannot_be_received_before_approval(purchasing_client: Te
         headers={**headers, "Idempotency-Key": "unapproved-receipt"},
     )
     assert response.status_code == 409
+
+
+def test_supplier_data_is_isolated_between_tenants(purchasing_client: TestClient) -> None:
+    _, tenant_a_headers = _register_growth(purchasing_client, "-a")
+    with TestClient(purchasing_client.app) as tenant_b_client:
+        tenant_b_client.headers.update({"Origin": str(tenant_b_client.base_url).rstrip("/")})
+        _, tenant_b_headers = _register_growth(tenant_b_client, "-b")
+        created = tenant_b_client.post(
+            "/api/v1/procurement/suppliers",
+            json={"code": "PRIVATE-B", "name": "Tenant B private supplier"},
+            headers=tenant_b_headers,
+        )
+        assert created.status_code == 201, created.text
+
+        visible_to_a = purchasing_client.get(
+            "/api/v1/procurement/suppliers", headers=tenant_a_headers
+        )
+        visible_to_b = tenant_b_client.get(
+            "/api/v1/procurement/suppliers", headers=tenant_b_headers
+        )
+        assert visible_to_a.status_code == 200, visible_to_a.text
+        assert visible_to_a.json()["items"] == []
+        assert visible_to_b.status_code == 200, visible_to_b.text
+        assert [item["id"] for item in visible_to_b.json()["items"]] == [created.json()["id"]]
+
+        forbidden_tenant_switch = purchasing_client.get(
+            "/api/v1/procurement/suppliers",
+            headers={**tenant_a_headers, "X-Tenant-ID": tenant_b_headers["X-Tenant-ID"]},
+        )
+        assert forbidden_tenant_switch.status_code == 403
