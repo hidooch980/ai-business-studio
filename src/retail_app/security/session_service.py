@@ -76,7 +76,6 @@ class SessionService:
         token = secrets.token_urlsafe(48)
         session_id = str(uuid4())
         family_id = session_id
-        expires_at = datetime.now(UTC) + self.lifetime
         with self.database.transaction() as connection:
             connection.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
             connection.execute("SELECT set_config('app.subject_id', %s, true)", (subject_id,))
@@ -94,6 +93,8 @@ class SessionService:
             ).fetchone()
             if identity is None or not identity[0] or membership is None or tenant is None:
                 raise SessionAuthenticationError("active identity and membership required")
+            database_now = connection.execute("SELECT clock_timestamp()").fetchone()[0]
+            expires_at = database_now + self.lifetime
             connection.execute(
                 """INSERT INTO auth_sessions
                    (id, tenant_id, identity_id, refresh_token_hash, expires_at, token_family_id)
@@ -114,8 +115,6 @@ class SessionService:
         presented_hash = _digest(token)
         new_token = secrets.token_urlsafe(48)
         new_id = str(uuid4())
-        now = datetime.now(UTC)
-        new_expiry = now + self.lifetime
         failure: str | None = None
         issued: IssuedSession | None = None
 
@@ -141,6 +140,7 @@ class SessionService:
             if old is None:
                 raise SessionAuthenticationError("invalid session")
             family_id, revoked_at, expires_at = old
+            database_now = connection.execute("SELECT clock_timestamp()").fetchone()[0]
             if revoked_at is not None:
                 connection.execute(
                     """UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, statement_timestamp())
@@ -148,7 +148,7 @@ class SessionService:
                     (family_id,),
                 )
                 failure = "replay"
-            elif expires_at <= now:
+            elif expires_at <= database_now:
                 connection.execute(
                     """UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, statement_timestamp())
                        WHERE token_family_id = %s AND revoked_at IS NULL""",
@@ -156,6 +156,7 @@ class SessionService:
                 )
                 failure = "expired"
             else:
+                new_expiry = database_now + self.lifetime
                 identity = connection.execute(
                     "SELECT is_active FROM identities WHERE id = %s FOR SHARE", (subject_id,)
                 ).fetchone()
