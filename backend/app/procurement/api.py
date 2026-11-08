@@ -411,6 +411,23 @@ def receive_purchase_order(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        concurrent_replay = db.scalar(
+            select(ProcurementReceipt).where(
+                ProcurementReceipt.tenant_id == principal.tenant.id,
+                ProcurementReceipt.idempotency_key == key,
+            )
+        )
+        if concurrent_replay is not None:
+            if concurrent_replay.request_hash != request_hash:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency-Key was used for a different receipt",
+                ) from exc
+            return {
+                "receipt_id": str(concurrent_replay.id),
+                "purchase_order_id": str(concurrent_replay.purchase_order_id),
+                "replayed": True,
+            }
         raise HTTPException(status_code=409, detail="Receipt conflicts with existing inventory records") from exc
     except HTTPException:
         db.rollback()
