@@ -47,6 +47,8 @@ def module_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[TestCl
 
 
 def _register(client: TestClient, email: str) -> str:
+    csrf_token = client.cookies.get("abs_csrf")
+    headers = {"X-CSRF-Token": csrf_token} if csrf_token else {}
     response = client.post(
         "/api/v1/auth/register",
         json={
@@ -56,6 +58,7 @@ def _register(client: TestClient, email: str) -> str:
             "tenant_name": "Module Studio",
             "tenant_slug": email.split("@")[0],
         },
+        headers=headers,
     )
     assert response.status_code == 201, response.text
     return response.json()["memberships"][0]["tenant_id"]
