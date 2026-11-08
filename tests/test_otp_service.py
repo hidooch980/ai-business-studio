@@ -7,8 +7,8 @@ from uuid import UUID
 import pytest
 
 from retail_app.security.otp import (
-    OTPChannel,
     OTPChallenge,
+    OTPChannel,
     OTPConfig,
     OTPPurpose,
     OTPRejected,
