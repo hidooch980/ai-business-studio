@@ -3,15 +3,13 @@
 The host application must inject an AccessContext resolved from its authenticated
 session/membership layer. Tenant and role are never accepted from request bodies.
 """
-from __future__ import annotations
-
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from retail_app.procurement import chain
 from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
@@ -69,6 +67,13 @@ class GoodsReceiptInput(BaseModel):
     lines: list[ReceiptLineInput] = Field(min_length=1)
     allow_overdelivery: bool = False
 
+    @field_validator("received_at")
+    @classmethod
+    def require_timezone_aware_received_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("received_at must include a timezone")
+        return value
+
 
 class SupplierInvoiceLineInput(BaseModel):
     po_line_number: int = Field(ge=1)
@@ -104,6 +109,13 @@ class SupplierPaymentInput(BaseModel):
     method: str
     allocations: list[PaymentAllocationInput] = Field(min_length=1)
 
+    @field_validator("paid_at")
+    @classmethod
+    def require_timezone_aware_paid_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("paid_at must include a timezone")
+        return value
+
 
 def _run(operation: Callable[[], object]) -> object:
     try:
@@ -115,8 +127,13 @@ def _run(operation: Callable[[], object]) -> object:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
-        if getattr(exc, "sqlstate", None) == "23505":
+        sqlstate = getattr(exc, "sqlstate", None)
+        if sqlstate == "23505":
             raise HTTPException(status_code=409, detail="duplicate business reference") from exc
+        if isinstance(sqlstate, str) and sqlstate.startswith("23"):
+            raise HTTPException(status_code=409, detail="request conflicts with existing data or constraints") from exc
+        if isinstance(sqlstate, str) and sqlstate.startswith("22"):
+            raise HTTPException(status_code=422, detail="request contains invalid data") from exc
         raise
 
 

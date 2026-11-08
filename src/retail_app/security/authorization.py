@@ -52,6 +52,8 @@ class AccessContext:
     role: Role
     branch_ids: frozenset[str] = frozenset()
     active: bool = True
+    session_id: str | None = None
+    session_token_hash: bytes | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +114,10 @@ def authorize(
         raise AccessDenied("inactive identity")
     if not context.subject_id or not context.tenant_id:
         raise AccessDenied("incomplete identity")
+    # Fail closed if a context is forged or constructed with an unrecognized role.
+    # This prevents a KeyError/500 from escaping the authorization boundary.
+    if not isinstance(context.role, Role):
+        raise AccessDenied("unsupported identity role")
     if context.tenant_id != resource.tenant_id:
         raise AccessDenied("cross-tenant access denied")
     if permission not in _ROLE_PERMISSIONS[context.role]:

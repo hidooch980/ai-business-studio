@@ -52,7 +52,7 @@ def _audit(connection: Any, context: AccessContext, action: str, resource_type: 
 
 def get_purchase_order(database: Any, context: AccessContext, order_id: str) -> dict[str, object]:
     """Read one purchase order and its lines within the caller's tenant/branch scope."""
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         row = conn.execute(
             """SELECT id, branch_id, supplier_id, order_number, currency, status,
                       order_date, expected_date, notes
@@ -95,7 +95,7 @@ def list_purchase_orders(database: Any, context: AccessContext, *, branch_id: st
             return []
     else:
         branch_ids = [branch_id] if branch_id else []
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         if branch_ids:
             rows = conn.execute(
                 """SELECT id, branch_id, supplier_id, order_number, currency, status, order_date
@@ -132,7 +132,7 @@ def update_draft_purchase_order(database: Any, context: AccessContext, order_id:
     payload = {"order_id": order_id, "supplier_id": supplier_id, "currency": currency,
                "order_date": order_date.isoformat(), "lines": lines}
     operation = "procurement.purchase_order.update"
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         cached = reserve_idempotency(conn, tenant_id=context.tenant_id, operation=operation,
                                      key=idempotency_key, payload=payload)
         if cached is not None:
@@ -197,7 +197,7 @@ def approve_purchase_order(database: Any, context: AccessContext, order_id: str,
     authorize(context, Permission.PURCHASE_ORDER_APPROVE, ResourceScope(context.tenant_id))
     payload = {"order_id": order_id}
     operation = "procurement.purchase_order.approve"
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         cached = reserve_idempotency(conn, tenant_id=context.tenant_id, operation=operation,
                                      key=idempotency_key, payload=payload)
         if cached is not None:
@@ -252,7 +252,7 @@ def receive_goods(database: Any, context: AccessContext, order_id: str, *,
                "received_at": received_at.isoformat(), "lines": lines,
                "allow_overdelivery": allow_overdelivery}
     operation = "procurement.goods_receipt.create"
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         cached = reserve_idempotency(conn, tenant_id=context.tenant_id, operation=operation,
                                      key=idempotency_key, payload=payload)
         if cached is not None:
@@ -296,7 +296,7 @@ def receive_goods(database: Any, context: AccessContext, order_id: str, *,
             if po_line is None:
                 raise ValueError("receipt references an unknown purchase-order line")
             prior = conn.execute(
-                """SELECT COALESCE(SUM(grl.received_quantity_milli), 0)
+                """SELECT COALESCE(SUM(grl.accepted_quantity_milli), 0)
                    FROM goods_receipt_lines grl
                    JOIN goods_receipts gr ON gr.tenant_id = grl.tenant_id AND gr.id = grl.goods_receipt_id
                    WHERE grl.tenant_id = %s AND grl.purchase_order_id = %s
@@ -392,7 +392,7 @@ def match_supplier_invoice(database: Any, context: AccessContext, *, invoice_id:
                "due_date": due_date.isoformat(), "invoice_total_minor": invoice_total_minor,
                "lines": lines}
     operation = "procurement.supplier_invoice.match"
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         cached = reserve_idempotency(conn, tenant_id=context.tenant_id, operation=operation,
                                      key=idempotency_key, payload=payload)
         if cached is not None:
@@ -511,7 +511,7 @@ def record_supplier_payment(database: Any, context: AccessContext, *, payment_id
                "method": method, "allocations": allocations}
     operation = "procurement.supplier_payment.create"
     authorize(context, Permission.SUPPLIER_PAYMENT_WRITE, ResourceScope(context.tenant_id))
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         cached = reserve_idempotency(conn, tenant_id=context.tenant_id, operation=operation,
                                      key=idempotency_key, payload=payload)
         if cached is not None:
@@ -591,7 +591,7 @@ def list_accounts_payable(database: Any, context: AccessContext, *,
     if not 1 <= limit <= 200:
         raise ValueError("limit must be 1..200")
     authorize(context, Permission.ACCOUNTS_PAYABLE_READ, ResourceScope(context.tenant_id))
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         rows = conn.execute(
             """SELECT id, invoice_id, supplier_id, currency, original_amount_minor,
                       outstanding_amount_minor, due_date, status
@@ -612,7 +612,7 @@ def get_stock_balance(database: Any, context: AccessContext, *, branch_id: str,
     """Derive on-hand quantity from the append-only inventory movement subledger."""
     authorize(context, Permission.INVENTORY_READ,
               ResourceScope(context.tenant_id, branch_id=branch_id))
-    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id) as conn:
+    with database.tenant_transaction(tenant_id=context.tenant_id, subject_id=context.subject_id, expected_role=context.role.value, expected_branch_ids=context.branch_ids, session_id=context.session_id, session_token_hash=context.session_token_hash) as conn:
         row = conn.execute(
             """SELECT COALESCE(SUM(quantity_milli), 0)
                FROM inventory_movements

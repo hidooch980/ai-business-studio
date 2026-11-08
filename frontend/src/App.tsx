@@ -7,7 +7,7 @@ function Brand() {
 }
 
 function Header({ onLogin }: { onLogin: () => void }) {
-  return <header className="site-header"><Brand /><nav className="top-links"><a href="#features">امکانات</a><a href="#solutions">راهکارها</a><a href="#security">امنیت</a></nav><div className="header-actions"><button className="language">فا⌄</button><button className="button button-ghost" onClick={onLogin}>ورود کاربران</button><button className="button button-primary" onClick={onLogin}>شروع کنید <span>←</span></button></div></header>;
+  return <header className="site-header"><Brand /><nav className="top-links"><a href="#features">امکانات</a><a href="#solutions">راهکارها</a><a href="#security">امنیت</a></nav><div className="header-actions"><span className="language" aria-label="زبان فعلی: فارسی">فارسی</span><button className="button button-ghost" onClick={onLogin}>ورود کاربران</button><button className="button button-primary" onClick={onLogin}>شروع کنید <span>←</span></button></div></header>;
 }
 
 function Home({ onLogin, onPreview }: { onLogin: () => void; onPreview: () => void }) {
