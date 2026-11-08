@@ -133,6 +133,11 @@ def change_tenant_edition(
         .where(TenantSubscription.tenant_id == principal.tenant.id)
         .with_for_update()
     )
+    if subscription is not None and subscription.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Suspended subscriptions cannot change editions",
+        )
     if subscription is None:
         subscription = TenantSubscription(
             tenant_id=principal.tenant.id,
@@ -206,11 +211,16 @@ def set_module_enabled(
     if definition.status is ModuleStatus.PLANNED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Module is not released")
 
-    db.scalar(
+    subscription = db.scalar(
         select(TenantSubscription)
         .where(TenantSubscription.tenant_id == principal.tenant.id)
         .with_for_update()
     )
+    if subscription is None or subscription.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An active tenant subscription is required",
+        )
     rows = {
         item.module_id: item
         for item in db.scalars(
