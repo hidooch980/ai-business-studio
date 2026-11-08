@@ -7,8 +7,10 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
+from uuid import uuid4
 
 from backend.app.core.config import get_settings
 from backend.app.db.session import build_engine, get_db_session
@@ -412,3 +414,111 @@ def test_purchase_to_pay_three_way_match_and_partial_payment(purchasing_client: 
         assert saved_invoice.paid_minor == 3750
         assert saved_invoice.status == "paid"
         assert len(payments) == 2
+
+
+
+@pytest.fixture
+def postgres_purchasing_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
+    source_url = os.environ.get("DATABASE_URL", "")
+    if not source_url.startswith("postgresql"):
+        pytest.skip("PostgreSQL concurrency test requires DATABASE_URL")
+    database_name = f"abs_concurrency_{uuid4().hex[:12]}"
+    admin_engine = create_engine(source_url)
+    with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        connection.exec_driver_sql(f'CREATE DATABASE "{database_name}"')
+    database_url = make_url(source_url).set(database=database_name).render_as_string(hide_password=False)
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("ALLOW_PUBLIC_REGISTRATION", "true")
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", "false")
+    get_settings.cache_clear()
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = database_url
+    migration = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        check=False,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert migration.returncode == 0, f"{migration.stdout}\n{migration.stderr}"
+    engine = build_engine(database_url)
+    application = create_app()
+    application.state.test_engine = engine
+
+    def override_db() -> Generator[Session, None, None]:
+        with Session(engine, expire_on_commit=False) as db:
+            yield db
+
+    application.dependency_overrides[get_db_session] = override_db
+    try:
+        with TestClient(application) as client:
+            client.headers.update({"Origin": str(client.base_url).rstrip("/")})
+            yield client
+    finally:
+        application.dependency_overrides.clear()
+        engine.dispose()
+        get_settings.cache_clear()
+        with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+            connection.exec_driver_sql(f'DROP DATABASE IF EXISTS "{database_name}" WITH (FORCE)')
+        admin_engine.dispose()
+
+
+
+def test_postgres_rejects_concurrent_over_receipt(
+    postgres_purchasing_client: TestClient,
+) -> None:
+    client = postgres_purchasing_client
+    _, headers = _register_growth(client, "-concurrency")
+    supplier = client.post(
+        "/api/v1/procurement/suppliers",
+        json={"code": "RACE-SUP", "name": "Concurrency Supplier"},
+        headers=headers,
+    )
+    product = client.post(
+        "/api/v1/catalog/products",
+        json={"sku": "RACE-001", "name": "Concurrency Item", "unit_code": "pcs"},
+        headers=headers,
+    )
+    warehouse = client.post(
+        "/api/v1/inventory/warehouses",
+        json={"code": "RACE-WH", "name": "Concurrency Warehouse"},
+        headers=headers,
+    )
+    assert supplier.status_code == product.status_code == warehouse.status_code == 201
+    order = client.post(
+        "/api/v1/procurement/purchase-orders",
+        json={
+            "supplier_id": supplier.json()["id"],
+            "warehouse_id": warehouse.json()["id"],
+            "lines": [{
+                "product_id": product.json()["id"],
+                "quantity": 5,
+                "unit_cost_minor": 100,
+            }],
+        },
+        headers=headers,
+    )
+    assert order.status_code == 201, order.text
+    order_id = order.json()["id"]
+    line_id = order.json()["lines"][0]["id"]
+    approved = client.post(
+        f"/api/v1/procurement/purchase-orders/{order_id}/approve",
+        headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+
+    def receive(key: str) -> int:
+        response = client.post(
+            f"/api/v1/procurement/purchase-orders/{order_id}/receipts",
+            json={"lines": [{"purchase_order_line_id": line_id, "quantity": 4}]},
+            headers={**headers, "Idempotency-Key": key},
+        )
+        return response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = sorted(pool.map(receive, ["parallel-receipt-a", "parallel-receipt-b"]))
+    assert results == [201, 409]
+
+    balances = client.get("/api/v1/inventory/balances", headers=headers)
+    assert balances.status_code == 200, balances.text
+    assert balances.json()["items"][0]["quantity_on_hand"] == 4
