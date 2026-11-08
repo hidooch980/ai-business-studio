@@ -5,11 +5,11 @@ session/membership layer. Tenant and role are never accepted from request bodies
 """
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from typing import Annotated
 
 from retail_app.procurement import chain
 from retail_app.procurement.purchase_orders import PurchaseOrder, PurchaseOrderLine
