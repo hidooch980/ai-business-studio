@@ -2,6 +2,7 @@
 
 Configure DATABASE_URL with the restricted Runtime DSN before starting Uvicorn.
 """
+# ruff: noqa: I001
 import os
 
 from retail_app.api.host import create_app
