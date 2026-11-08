@@ -1,6 +1,6 @@
 # Product editions, modular packaging and versioning policy
 
-Status: **Approved product architecture; module registry implementation is an initial catalog only**
+Status: **Approved product architecture; persistent tenant entitlements and activation API are implemented in the feature branch**
 
 ## 1. Product packaging model
 
@@ -13,7 +13,7 @@ AI Business Studio is one modular product, not a collection of disconnected edit
 - Tenant entitlement is persisted server-side and checked for every protected operation. Hiding a menu item is never authorization.
 - A module's lifecycle status is explicit: foundation, preview, or planned. Planned modules cannot be activated merely because an edition lists them.
 
-The current Python registry is a catalog/entitlement preview. It does not yet persist subscriptions, bill customers, activate tenant modules, or enforce runtime entitlements.
+The Python registry defines the catalog and edition bundles. Persistent tenant subscriptions and module activation are implemented in `TENANT_MODULE_MANAGEMENT.md`; paid checkout, billing and payment verification remain unimplemented.
 
 ## 2. Proposed product editions
 
