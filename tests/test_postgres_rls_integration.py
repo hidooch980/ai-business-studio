@@ -348,7 +348,7 @@ def test_11_supplier_and_purchase_order_services_commit_atomically_and_replay(ru
         branch_id=str(BRANCH_A),
         supplier_id=supplier_id,
         currency="EUR",
-        order_date=__import__("datetime").date(2026, 11, 8),
+        order_date=date(2026, 11, 8),
         lines=(PurchaseOrderLine(1, str(uuid4()), "Test item", 2000, 125),),
         order_number="PO-INTEGRATION-0001",
     )
