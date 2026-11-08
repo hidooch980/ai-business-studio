@@ -23,8 +23,8 @@ class SessionCookieSettings:
     path: str = "/"
 
     def validate(self) -> None:
-        if not self.name or self.path != "/" or self.samesite.lower() not in {"strict", "lax"}:
-            raise ValueError("unsafe session-cookie configuration")
+        if not self.name or self.path != "/" or self.samesite.lower() != "strict" or not self.httponly:
+            raise ValueError("session cookies require HttpOnly, SameSite=Strict and Path=/")
         if self.name.startswith("__Host-") and (not self.secure or self.path != "/"):
             raise ValueError("__Host- cookies require Secure and Path=/")
 
